@@ -35,5 +35,10 @@ Connected to github.com — fetching metrics for 0jre...
 </div>
 
 <div align="center">
-  <img src="./profile-summary-card-output/github_dark/4-productive-time.svg" />
+  <img height="180" src="https://github-readme-stats.vercel.app/api?username=0jre&show_icons=true&theme=github_dark&hide_border=true&include_all_commits=true&count_private=true" />
+  <img height="180" src="https://github-readme-stats.vercel.app/api/top-langs/?username=0jre&layout=compact&theme=github_dark&hide_border=true" />
+</div>
+
+<div align="center">
+  <img src="https://streak-stats.demolab.com?user=0jre&theme=github-dark-blue&hide_border=true" />
 </div>
