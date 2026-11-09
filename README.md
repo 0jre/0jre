@@ -18,7 +18,7 @@ guest@0jre:~$ stats --github
 commits: yes
 
 guest@0jre:~$ contact
-mail:  jc7104484@gmail.com
+mail:  ojulio.re@gmail.com
 gh:    github.com/0jre
 
 guest@0jre:~$ exit
