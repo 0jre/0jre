@@ -12,7 +12,7 @@ guest@0jre:~$ cat /etc/motd
 guest@0jre:~$ cat ~/.config/stack
 langs:      TypeScript · Python · Rust · Go
 agents:     MCP · multi-agent orchestration · LLM tooling
-infra:      AWS · Docker · Linux
+infra:      AWS · Docker · Linux · Windows
 
 guest@0jre:~$ stats --github
 commits: yes
