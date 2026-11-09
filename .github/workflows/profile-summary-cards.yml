@@ -18,3 +18,16 @@ jobs:
       - uses: vn7n24fzkq/github-profile-summary-cards@release
         env:
           GITHUB_TOKEN: ${{ secrets.STATS_PAT }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests && python scripts/top_langs.py
+        env:
+          STATS_PAT: ${{ secrets.STATS_PAT }}
+      - name: Commit top-langs card
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add top-langs.svg
+          git diff --cached --quiet || git commit -m "Update top-langs card"
+          git push
