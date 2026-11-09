@@ -31,10 +31,10 @@ Connected to github.com — fetching metrics for 0jre...
 ```
 
 <div align="center">
-  <img height="180" src="https://github-readme-stats.vercel.app/api?username=0jre&show_icons=true&theme=github_dark&hide_border=true&include_all_commits=true&count_private=true" />
-  <img height="180" src="https://github-readme-stats.vercel.app/api/top-langs/?username=0jre&layout=compact&theme=github_dark&hide_border=true" />
+  <img src="./profile-summary-card-output/github_dark/3-stats.svg" />
+  <img src="./profile-summary-card-output/github_dark/2-most-commit-language.svg" />
 </div>
 
 <div align="center">
-  <img src="https://streak-stats.demolab.com?user=0jre&theme=github-dark-blue&hide_border=true" />
+  <img src="./profile-summary-card-output/github_dark/0-profile-details.svg" />
 </div>
