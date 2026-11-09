@@ -35,7 +35,7 @@ Connected to github.com — fetching metrics for 0jre...
 </div>
 
 <div align="center">
-  <img height="180" src="https://github-readme-stats.vercel.app/api?username=0jre&show_icons=true&theme=github_dark&hide_border=true&include_all_commits=true&count_private=true" />
+  <img height="180" src="./profile-summary-card-output/github_dark/3-stats.svg" />
   <img height="180" src="./profile-summary-card-output/github_dark/2-most-commit-language.svg" />
 </div>
 
