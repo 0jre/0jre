@@ -31,11 +31,11 @@ Connected to github.com — fetching metrics for 0jre...
 ```
 
 <div align="center">
-  <img height="180" src="./profile-summary-card-output/github_dark/3-stats.svg" />
   <img src="./profile-summary-card-output/github_dark/0-profile-details.svg" />
 </div>
 
 <div align="center">
   <img src="https://streak-stats.demolab.com?user=0jre&theme=github-dark-blue&hide_border=true" />
+    <img height="180" src="./profile-summary-card-output/github_dark/3-stats.svg" />
 </div>
  
