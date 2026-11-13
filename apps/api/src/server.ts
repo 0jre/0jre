@@ -160,7 +160,66 @@ export async function buildServer(options: ServerOptions) {
         }
       : false,
   });
-  await app.register(helmet, { contentSecurityPolicy: false });
+  // Privy's documented web policy, plus this app's read-only market endpoints.
+  // https://docs.privy.io/security/implementation-guide/content-security-policy
+  await app.register(helmet, {
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "https://challenges.cloudflare.com",
+          "https://hcaptcha.com",
+          "https://*.hcaptcha.com",
+        ],
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "https://hcaptcha.com",
+          "https://*.hcaptcha.com",
+        ],
+        imgSrc: ["'self'", "data:", "blob:"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"],
+        childSrc: [
+          "https://auth.privy.io",
+          "https://verify.walletconnect.com",
+          "https://verify.walletconnect.org",
+        ],
+        frameSrc: [
+          "https://auth.privy.io",
+          "https://verify.walletconnect.com",
+          "https://verify.walletconnect.org",
+          "https://challenges.cloudflare.com",
+          "https://hcaptcha.com",
+          "https://*.hcaptcha.com",
+        ],
+        connectSrc: [
+          "'self'",
+          "https://auth.privy.io",
+          "wss://relay.walletconnect.com",
+          "wss://relay.walletconnect.org",
+          "wss://www.walletlink.org",
+          "https://*.rpc.privy.systems",
+          "https://explorer-api.walletconnect.com",
+          "https://api.mainnet-beta.solana.com",
+          "https://api.devnet.solana.com",
+          "https://api.testnet.solana.com",
+          "https://hcaptcha.com",
+          "https://*.hcaptcha.com",
+          "https://api.hyperliquid.xyz",
+          "https://api.dexscreener.com",
+        ],
+        workerSrc: ["'self'"],
+        manifestSrc: ["'self'"],
+      },
+    },
+  });
   await app.register(cors, {
     origin: options.corsOrigins ?? [],
     credentials: false,

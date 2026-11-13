@@ -220,6 +220,36 @@ async function setup(t: test.TestContext) {
   };
 }
 
+test("security: browser policy permits documented Privy resources without arbitrary scripts", async (t) => {
+  const s = await setup(t);
+  const r = await s.app.inject({ url: "/health" });
+  const policy = String(r.headers["content-security-policy"]);
+  assert.match(policy, /script-src 'self' https:\/\/challenges.cloudflare.com/);
+  assert.ok(policy.includes("https://auth.privy.io"));
+  assert.ok(policy.includes("object-src 'none'"));
+  assert.ok(!policy.match(/script-src[^;]*'unsafe-inline'/));
+});
+test("security: rising perp mid blocks a prepared intent before dispatch", async (t) => {
+  const s = await setup(t);
+  await s.risk({ maxOrderCents: 6000 });
+  const order = (await s.postPerp()).json();
+  s.venues.perpNotionalUsd = async () => 75;
+  const r = await s.submit(order.id);
+  assert.equal(r.statusCode, 403);
+  assert.equal(s.dispatches(), 0);
+});
+test("security: policy tightened during current-valuation lookup is rechecked before dispatch", async (t) => {
+  const s = await setup(t);
+  const order = (await s.postPerp()).json();
+  s.venues.perpNotionalUsd = async () => {
+    await s.risk({ killed: true });
+    return 50;
+  };
+  const r = await s.submit(order.id);
+  assert.equal(r.statusCode, 403);
+  assert.equal(s.dispatches(), 0);
+});
+
 test("security: same-millisecond orders receive wallet-scoped distinct nonces and cloids", async (t) => {
   const s = await setup(t);
   const responses = await Promise.all([

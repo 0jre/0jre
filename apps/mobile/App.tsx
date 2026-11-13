@@ -182,15 +182,27 @@ function Token({ m, size = 38 }: { m: Market; size?: number }) {
             fill="#90d9bc"
           />
         </Svg>
+      ) : m.symbol === "BTC" ? (
+        <Svg width={size * 0.65} height={size * 0.65} viewBox="0 0 30 30">
+          <Path
+            d="M8 7h9a4 4 0 0 1 0 8H8m3-8v16m-3 0h10a4 4 0 0 0 0-8M13 3v4m5-4v4m-5 16v4m5-4v4"
+            fill="none"
+            stroke={m.color}
+            strokeWidth={2.3}
+          />
+        </Svg>
+      ) : m.symbol === "ETH" ? (
+        <Svg width={size * 0.65} height={size * 0.65} viewBox="0 0 30 30">
+          <Path
+            d="M15 1 5 16 15 22 25 16Z M5 18 15 29 25 18 15 24Z"
+            fill={m.color}
+          />
+        </Svg>
       ) : (
         <Text
           style={{ fontSize: size * 0.51, color: m.color, fontWeight: "700" }}
         >
-          {m.symbol === "BTC"
-            ? "₿"
-            : m.symbol === "ETH"
-              ? "Ξ"
-              : m.symbol.slice(0, 1)}
+          {m.symbol.slice(0, 1)}
         </Text>
       )}
     </View>
@@ -1233,8 +1245,8 @@ export default function App() {
               {[
                 {
                   name: "Hyperliquid",
-                  tag: "Leitura de preços",
-                  body: "Snapshot público opcional de BTC, ETH e SOL. Não envia ordens.",
+                  tag: "Adapter de perp no backend",
+                  body: "Preços públicos e ordens limite assinadas no painel conectado. Testnet por padrão; execução depende da configuração do servidor.",
                 },
                 {
                   name: "Solana / DexScreener",
@@ -1243,8 +1255,8 @@ export default function App() {
                 },
                 {
                   name: "Jupiter · Raydium · Meteora · Pump.fun",
-                  tag: "Somente demonstração",
-                  body: "Sem swaps, RPC, roteamento ou assinatura. As referências de protocolo não indicam integração real.",
+                  tag: "Roteamento Jupiter no backend",
+                  body: "Cotação, transação, simulação e envio após assinatura. Acesso a pools depende da rota; não há integração direta com todos os protocolos.",
                 },
                 {
                   name: "GMGN / multichain",
@@ -1253,8 +1265,8 @@ export default function App() {
                 },
                 {
                   name: "Carteira & IA",
-                  tag: "Não conectado",
-                  body: "Sem chaves privadas, custódia, LLM ou agentes autônomos.",
+                  tag: "Privy · assinatura pelo usuário",
+                  body: "Login e carteiras no painel acima quando configurado. Não há executor LLM, custódia própria nem agentes autônomos.",
                 },
               ].map((x) => (
                 <View style={s.connection} key={x.name}>
@@ -1275,8 +1287,9 @@ export default function App() {
                 </View>
               ))}
               <Muted style={s.disclaimer}>
-                ORBIT / 0.1 · EXPERIMENTAL{"\n"}Uma base de simulação, não uma
-                plataforma de execução real.
+                ORBIT / 0.1 · EXPERIMENTAL{"\n"}Simulação e operações conectadas
+                separadas. Execução exige configuração, políticas do backend e
+                assinatura.
               </Muted>
             </>
           )}
