@@ -10,15 +10,17 @@
     "web": "npm run web --workspace apps/mobile",
     "typecheck": "tsc --noEmit -p apps/mobile && npm run typecheck --workspace apps/api",
     "test": "npm run test:mobile && npm run test --workspace apps/api",
-    "test:mobile": "tsx --test apps/mobile/src/domain.test.ts apps/mobile/src/services/marketData.test.ts apps/mobile/src/auth/auth.test.ts apps/mobile/src/trading/api.test.ts",
+    "test:mobile": "tsx --test apps/mobile/src/domain.test.ts apps/mobile/src/services/marketData.test.ts apps/mobile/src/auth/auth.test.ts apps/mobile/src/trading/api.test.ts apps/mobile/src/ui/theme.test.ts",
     "api": "tsx apps/api/src/index.ts",
     "build:web": "npm run build:web --workspace apps/mobile"
   },
   "devDependencies": {
-    "typescript": "~5.9.2",
-    "tsx": "^4.20.0",
+    "@tailwindcss/cli": "^4.3.5",
+    "@types/node": "^22.0.0",
     "@types/react": "~19.3.0",
-    "@types/node": "^22.0.0"
+    "tailwindcss": "^4.3.5",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.2"
   },
   "overrides": {
     "viem@^2.0.0": "^2.57.19",

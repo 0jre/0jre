@@ -1,12 +1,13 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {Platform, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Platform, StyleSheet, Text, TextInput, View} from 'react-native';
+import {useTheme} from '../ui/theme';
+import {TuffAction as Action} from '../ui/tuff';
 import {useWalletSession} from './WalletProvider';
 import {verifyBackendIdentity} from './verifyIdentity';
 
-function Action({label, onPress, disabled}: {label: string; onPress(): void; disabled?: boolean}) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress} style={[styles.button, disabled && {opacity: 0.45}]}><Text style={styles.buttonText}>{label}</Text></Pressable>;
-}
 export function WalletPanel() {
+  const {colors: c} = useTheme();
+  const styles = createStyles(c);
   const session = useWalletSession();
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -37,7 +38,7 @@ export function WalletPanel() {
     <Text style={styles.description}>Conta real separada da carteira paper. Entrar ou criar carteiras não assina nem envia operações.</Text>
     {!session.configured ? <Text style={styles.notice}>Privy não configurado. O modo demonstração permanece disponível. Configure EXPO_PUBLIC_PRIVY_APP_ID{Platform.OS !== 'web' ? ' e EXPO_PUBLIC_PRIVY_CLIENT_ID' : ''} para habilitar o login.</Text> : !session.ready ? <Text style={styles.description}>Inicializando sessão segura…</Text> : !session.userId ? <>
       <Text style={styles.label}>Email</Text>
-      <TextInput accessibilityLabel="Email para login Privy" value={email} onChangeText={value => {setEmail(value); setCode(''); setCodeSent(false);}} editable={!busy && !codeSent} inputMode="email" autoCapitalize="none" autoCorrect={false} placeholder="voce@exemplo.com" placeholderTextColor="#939a9f" style={styles.input}/>
+      <TextInput accessibilityLabel="Email para login Privy" value={email} onChangeText={value => {setEmail(value); setCode(''); setCodeSent(false);}} editable={!busy && !codeSent} inputMode="email" autoCapitalize="none" autoCorrect={false} placeholder="voce@exemplo.com" placeholderTextColor={c.muted} style={styles.input}/>
       {!codeSent ? <Action label="Enviar código por email" disabled={busy || !email.trim()} onPress={() => run(async () => {await session.sendEmailCode(email.trim()); setCodeSent(true);})}/> : <>
         <Text style={styles.label}>Código recebido por email</Text>
         <TextInput accessibilityLabel="Código de verificação Privy" value={code} onChangeText={setCode} editable={!busy} inputMode="numeric" autoComplete="one-time-code" style={styles.input}/>
@@ -60,16 +61,14 @@ export function WalletPanel() {
     {!!error && <Text accessibilityLiveRegion="polite" style={styles.error}>{error}</Text>}
   </View>;
 }
-const styles = StyleSheet.create({
-  panel: {backgroundColor: '#15191f', borderColor: '#353c45', borderWidth: 1, borderRadius: 18, padding: 17, gap: 13, marginVertical: 14},
-  title: {color: '#f2f5ef', fontSize: 17, fontWeight: '600'},
-  description: {color: '#bac3c8', fontSize: 12, lineHeight: 20},
-  label: {color: '#a6b0b8', fontSize: 11, lineHeight: 18},
-  notice: {color: '#d8ef80', fontSize: 12, lineHeight: 20},
-  input: {color: '#f2f5ef', backgroundColor: '#101318', borderColor: '#414a55', borderWidth: 1, padding: 12, borderRadius: 10, fontSize: 14},
-  button: {backgroundColor: '#d8ef80', borderRadius: 12, padding: 12, alignItems: 'center'},
-  buttonText: {color: '#15191f', fontSize: 13, fontWeight: '600'},
+const createStyles = (c: ReturnType<typeof useTheme>['colors']) => StyleSheet.create({
+  panel: {backgroundColor: c.card, borderColor: c.line, borderWidth: 1, borderRadius: 18, padding: 17, gap: 13, marginVertical: 14},
+  title: {color: c.ink, fontSize: 17, fontWeight: '600'},
+  description: {color: c.muted, fontSize: 12, lineHeight: 20},
+  label: {color: c.muted, fontSize: 11, lineHeight: 18},
+  notice: {color: c.green, fontSize: 12, lineHeight: 20},
+  input: {color: c.ink, backgroundColor: c.bg, borderColor: c.line, borderWidth: 1, padding: 12, borderRadius: 10, fontSize: 14},
   wallet: {gap: 4, paddingVertical: 8},
-  address: {color: '#edf1e8', fontSize: 11, lineHeight: 18},
-  error: {color: '#ff9ba3', fontSize: 12, lineHeight: 20},
+  address: {color: c.ink, fontSize: 11, lineHeight: 18},
+  error: {color: c.red, fontSize: 12, lineHeight: 20},
 });

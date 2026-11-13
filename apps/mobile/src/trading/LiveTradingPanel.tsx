@@ -8,6 +8,8 @@ import {
   View,
 } from "react-native";
 import { useWalletSession } from "../auth/WalletProvider";
+import { useTheme } from "../ui/theme";
+import { TuffAction } from "../ui/tuff";
 import { TradingApi, type ConnectedOrder } from "./api";
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const SOL = "So11111111111111111111111111111111111111112";
@@ -22,28 +24,25 @@ function Action({
   disabled?: boolean;
   danger?: boolean;
 }) {
+  const { colors: c } = useTheme();
+  const styles = createStyles(c);
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
+    <TuffAction
+      label={label}
       onPress={run}
       disabled={disabled}
-      style={[
-        styles.button,
-        danger && { backgroundColor: "#3a2129" },
-        disabled && { opacity: 0.4 },
-      ]}
+      style={[styles.button, danger && { backgroundColor: c.negativeTint }]}
     >
       <Text
         style={{
-          color: danger ? "#ff8c95" : "#141b0d",
+          color: danger ? c.red : c.onBrand,
           fontSize: 13,
           fontWeight: "600",
         }}
       >
         {label}
       </Text>
-    </Pressable>
+    </TuffAction>
   );
 }
 function Field({
@@ -55,6 +54,8 @@ function Field({
   value: string;
   set: (v: string) => void;
 }) {
+  const { colors: c } = useTheme();
+  const styles = createStyles(c);
   return (
     <View style={{ gap: 7 }}>
       <Text style={styles.label}>{label}</Text>
@@ -70,6 +71,8 @@ function Field({
   );
 }
 export function LiveTradingPanel() {
+  const { colors: c } = useTheme();
+  const styles = createStyles(c);
   const session = useWalletSession();
   const api = useMemo(
     () => new TradingApi(session.getAccessToken),
@@ -498,7 +501,7 @@ export function LiveTradingPanel() {
       {!!error && (
         <Text
           accessibilityLiveRegion="polite"
-          style={{ fontSize: 12, color: "#ff8c95", lineHeight: 19 }}
+          style={{ fontSize: 12, color: c.red, lineHeight: 19 }}
         >
           {error}
         </Text>
@@ -526,21 +529,21 @@ export function LiveTradingPanel() {
     </View>
   );
 }
-const styles = StyleSheet.create({
+const createStyles = (c: ReturnType<typeof useTheme>["colors"]) => StyleSheet.create({
   panel: {
     padding: 17,
     gap: 16,
     borderWidth: 1,
-    borderColor: "#333d2b",
+    borderColor: c.line,
     borderRadius: 18,
-    backgroundColor: "#121810",
+    backgroundColor: c.card,
     marginVertical: 14,
   },
-  title: { fontSize: 17, fontWeight: "600", color: "#edf1e8" },
-  description: { fontSize: 12, lineHeight: 20, color: "#b8c0b3" },
-  label: { fontSize: 10, lineHeight: 17, color: "#8b9784" },
+  title: { fontSize: 17, fontWeight: "600", color: c.ink },
+  description: { fontSize: 12, lineHeight: 20, color: c.muted },
+  label: { fontSize: 10, lineHeight: 17, color: c.muted },
   button: {
-    backgroundColor: "#d8ef80",
+    backgroundColor: c.brand,
     padding: 12,
     borderRadius: 12,
     alignItems: "center",
@@ -549,29 +552,29 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
   input: {
     borderWidth: 1,
-    borderColor: "#35402f",
+    borderColor: c.line,
     borderRadius: 8,
     padding: 11,
-    color: "#eef2e9",
+    color: c.ink,
     fontSize: 12,
     minWidth: 0,
-    backgroundColor: "#0c110a",
+    backgroundColor: c.bg,
   },
   review: {
     padding: 14,
     gap: 15,
     borderRadius: 12,
-    backgroundColor: "#1b2118",
+    backgroundColor: c.raised,
   },
   code: {
     fontSize: 9,
     lineHeight: 14,
-    color: "#a6b29d",
+    color: c.muted,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
   history: {
     paddingVertical: 9,
     borderBottomWidth: 1,
-    borderBottomColor: "#303a2a",
+    borderBottomColor: c.line,
   },
 });

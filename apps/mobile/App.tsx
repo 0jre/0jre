@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -29,18 +28,14 @@ import {
   setKillSwitch,
 } from "./src/domain";
 import { fetchPublicQuotes } from "./src/services/marketData";
+import { ThemeProvider, useTheme } from "./src/ui/theme";
+import { TuffAction, TuffPill } from "./src/ui/tuff";
 
-const c = {
-  bg: "#080c10",
-  card: "#15191f",
-  raised: "#20242a",
-  line: "#292e34",
-  ink: "#f1f3f5",
-  muted: "#8b9099",
-  lime: "#d8ef80",
-  green: "#b2e35b",
-  red: "#ff525e",
-};
+type Palette = ReturnType<typeof useTheme>["colors"];
+function useAppStyles() {
+  const { colors } = useTheme();
+  return useMemo(() => createStyles(colors), [colors]);
+}
 const money = (v: number) =>
   v.toLocaleString("en-US", {
     style: "currency",
@@ -92,17 +87,18 @@ const paths: Record<Glyph, string> = {
 function Icon({
   name,
   size = 22,
-  color = c.ink,
+  color,
 }: {
   name: Glyph;
   size?: number;
   color?: string;
 }) {
+  const { colors: c } = useTheme();
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
         d={paths[name]}
-        stroke={color}
+        stroke={color ?? c.ink}
         strokeWidth={1.7}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -124,18 +120,14 @@ function Tap({
   disabled?: boolean;
 }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
+    <TuffAction
+      label={label}
       onPress={onPress}
       disabled={disabled}
-      style={({ pressed }) => [
-        style,
-        (pressed || disabled) && { opacity: 0.42 },
-      ]}
+      style={style}
     >
       {children}
-    </Pressable>
+    </TuffAction>
   );
 }
 function Muted({
@@ -145,22 +137,11 @@ function Muted({
   children: React.ReactNode;
   style?: object;
 }) {
+  const s = useAppStyles();
   return <Text style={[s.muted, style]}>{children}</Text>;
 }
 function Pill({ text, bright = false }: { text: string; bright?: boolean }) {
-  return (
-    <View style={[s.pill, bright && { backgroundColor: "#29301c" }]}>
-      <Text
-        style={{
-          fontSize: 10,
-          fontWeight: "600",
-          color: bright ? c.lime : c.muted,
-        }}
-      >
-        {text}
-      </Text>
-    </View>
-  );
+  return <TuffPill text={text} bright={bright} />;
 }
 function Token({ m, size = 38 }: { m: Market; size?: number }) {
   const sol = m.symbol === "SOL";
@@ -179,7 +160,7 @@ function Token({ m, size = 38 }: { m: Market; size?: number }) {
         <Svg width={size * 0.65} height={size * 0.65} viewBox="0 0 30 30">
           <Path
             d="M7 5h21l-5 5H2z M2 13h21l5 5H7z M7 21h21l-5 5H2z"
-            fill="#90d9bc"
+            fill={m.color}
           />
         </Svg>
       ) : m.symbol === "BTC" ? (
@@ -209,6 +190,8 @@ function Token({ m, size = 38 }: { m: Market; size?: number }) {
   );
 }
 function Candles({ m }: { m: Market }) {
+  const { colors: c } = useTheme();
+  const s = useAppStyles();
   const values = m.history;
   const low = Math.min(...values) * 0.995;
   const range = Math.max(...values) * 1.005 - low;
@@ -228,7 +211,7 @@ function Candles({ m }: { m: Market }) {
             x2={360}
             y1={v}
             y2={v}
-            stroke="#242930"
+            stroke={c.line}
             strokeWidth={0.7}
           />
         ))}
@@ -261,7 +244,7 @@ function Candles({ m }: { m: Market }) {
           x2={360}
           y1={y(values[values.length - 1])}
           y2={y(values[values.length - 1])}
-          stroke="#79818b"
+          stroke={c.muted}
           strokeDasharray="3 4"
         />
       </Svg>
@@ -276,6 +259,17 @@ function Candles({ m }: { m: Market }) {
 }
 
 export default function App() {
+  return (
+    <ThemeProvider>
+      <TradingApp />
+    </ThemeProvider>
+  );
+}
+
+function TradingApp() {
+  const { colors: c, mode, setMode } = useTheme();
+  const s = useAppStyles();
+  const toggleTheme = () => setMode(mode === "dark" ? "light" : "dark");
   const { width } = useWindowDimensions();
   const [page, setPage] = useState<Page>("portfolio");
   const [account, setAccount] = useState<Account>(createAccount);
@@ -452,7 +446,7 @@ export default function App() {
             style={s.smallAction}
           >
             <Text style={s.smallActionText}>Explorar mercados</Text>
-            <Icon name="arrow" size={17} color={c.lime} />
+            <Icon name="arrow" size={17} color={c.brand} />
           </Tap>
         </View>
       ) : (
@@ -518,12 +512,12 @@ export default function App() {
       <View
         style={[s.stage, { justifyContent: "center", alignItems: "center" }]}
       >
-        <ActivityIndicator color={c.lime} />
+        <ActivityIndicator color={c.brand} />
       </View>
     );
   return (
     <View style={s.stage}>
-      <StatusBar style="light" />
+      <StatusBar style={mode === "dark" ? "light" : "dark"} />
       <View style={[s.phone, width > 520 && s.desktopPhone]}>
         <View style={s.topbar}>
           {selected ? (
@@ -557,7 +551,7 @@ export default function App() {
               >
                 <View style={s.avatar}>
                   <Text
-                    style={{ color: c.lime, fontWeight: "600", fontSize: 11 }}
+                    style={{ color: c.ink, fontWeight: "600", fontSize: 11 }}
                   >
                     JR
                   </Text>
@@ -578,6 +572,15 @@ export default function App() {
               </Tap>
             </>
           )}
+          <Tap
+            label={mode === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}
+            onPress={toggleTheme}
+            style={s.themeButton}
+          >
+            <Text style={s.themeButtonText}>
+              {mode === "dark" ? "Claro" : "Escuro"}
+            </Text>
+          </Tap>
         </View>
         {account.killed && (
           <Tap
@@ -693,14 +696,14 @@ export default function App() {
                     label={hidden ? "Mostrar saldo" : "Ocultar saldo"}
                     onPress={() => setHidden(!hidden)}
                   >
-                    <Icon name="eye" color="#424b23" size={19} />
+                    <Icon name="eye" color={c.muted} size={19} />
                   </Tap>
                 </View>
                 <Text style={s.balanceValue}>
                   {hidden ? "••••••" : money(equity)}
                 </Text>
                 <View style={s.row}>
-                  <Text style={{ color: "#434d28", fontSize: 12 }}>
+                  <Text style={{ color: c.muted, fontSize: 12 }}>
                     Disponível {hidden ? "••••" : money(account.cash)}
                   </Text>
                 </View>
@@ -711,12 +714,12 @@ export default function App() {
                         width: 5,
                         height: 5,
                         borderRadius: 3,
-                        backgroundColor: "#394322",
+                        backgroundColor: c.green,
                       }}
                     />
                     <Text
                       style={{
-                        color: "#394322",
+                        color: c.muted,
                         fontSize: 10,
                         fontWeight: "600",
                       }}
@@ -724,7 +727,7 @@ export default function App() {
                       PAPER WALLET
                     </Text>
                   </View>
-                  <Text style={{ color: "#65703a", fontSize: 11 }}>USD</Text>
+                  <Text style={{ color: c.muted, fontSize: 11 }}>USD</Text>
                 </View>
                 <View pointerEvents="none" style={s.orbital}>
                   <Svg width={145} height={145} viewBox="0 0 145 145">
@@ -734,7 +737,7 @@ export default function App() {
                         cx={73}
                         cy={73}
                         r={r}
-                        stroke="#65743a"
+                        stroke={c.muted}
                         strokeWidth={0.55}
                         fill="none"
                         opacity={0.15 + i * 0.06}
@@ -742,7 +745,7 @@ export default function App() {
                     ))}
                     <Path
                       d="m35 90 44-57 25 45-41 34z"
-                      fill="#637237"
+                      fill={c.ink}
                       opacity={0.16}
                     />
                   </Svg>
@@ -792,7 +795,7 @@ export default function App() {
                 style={s.agentBanner}
               >
                 <View style={s.agentMark}>
-                  <Icon name="agents" color={c.lime} size={23} />
+                  <Icon name="agents" color={c.brand} size={23} />
                 </View>
                 <View style={{ flex: 1, gap: 5 }}>
                   <Text
@@ -907,7 +910,7 @@ export default function App() {
                   >
                     <Text
                       style={{
-                        color: filter === f ? c.lime : c.muted,
+                        color: filter === f ? c.ink : c.muted,
                         fontSize: 12,
                       }}
                     >
@@ -955,7 +958,7 @@ export default function App() {
                     disabled={busy}
                     style={s.refresh}
                   >
-                    <Text style={{ color: c.lime, fontSize: 12 }}>
+                    <Text style={{ color: c.brand, fontSize: 12 }}>
                       {busy ? "Lendo…" : "Atualizar"}
                     </Text>
                   </Tap>
@@ -984,20 +987,20 @@ export default function App() {
                 Você define o ritmo. Uma ordem simulada por toque, com limites
                 de risco.
               </Muted>
-              {account.agents.map((a, i) => (
+              {account.agents.map((a) => (
                 <View key={a.id} style={s.agentCard}>
                   <View style={s.row}>
                     <View
                       style={[
                         s.agentMark,
                         {
-                          backgroundColor: ["#282d20", "#272436", "#202c32"][i],
+                          backgroundColor: c.raised,
                         },
                       ]}
                     >
                       <Icon
                         name="agents"
-                        color={["#d8ef80", "#b7a1e7", "#85c5cf"][i]}
+                        color={c.brand}
                         size={25}
                       />
                     </View>
@@ -1015,7 +1018,7 @@ export default function App() {
                       }
                       style={[
                         s.toggle,
-                        a.active && { backgroundColor: c.lime },
+                        a.active && { backgroundColor: c.brand },
                       ]}
                     >
                       <View
@@ -1023,7 +1026,7 @@ export default function App() {
                           s.toggleKnob,
                           a.active && {
                             alignSelf: "flex-end",
-                            backgroundColor: "#27311c",
+                            backgroundColor: c.onBrand,
                           },
                         ]}
                       />
@@ -1046,7 +1049,7 @@ export default function App() {
                         style={{
                           height: 3,
                           width: `${Math.min(100, (a.spent / a.budget) * 100)}%`,
-                          backgroundColor: c.lime,
+                          backgroundColor: c.brand,
                           borderRadius: 2,
                         }}
                       />
@@ -1066,9 +1069,9 @@ export default function App() {
                     }
                     style={s.agentRun}
                   >
-                    <Icon name="play" size={13} color={c.lime} />
+                    <Icon name="play" size={13} color={c.brand} />
                     <Text
-                      style={{ color: c.lime, fontSize: 12, fontWeight: "600" }}
+                      style={{ color: c.brand, fontSize: 12, fontWeight: "600" }}
                     >
                       Simular uma operação · BTC
                     </Text>
@@ -1128,7 +1131,7 @@ export default function App() {
                     setCommand("");
                   }}
                 >
-                  <Icon name="arrow" color={c.lime} />
+                  <Icon name="arrow" color={c.brand} />
                 </Tap>
               </View>
               <Muted style={s.disclaimer}>
@@ -1181,14 +1184,14 @@ export default function App() {
                             s.historyIcon,
                             {
                               backgroundColor:
-                                t.action === "close" ? "#2b2525" : "#252d20",
+                                t.action === "close" ? c.raised : c.positiveTint,
                             },
                           ]}
                         >
                           <Icon
                             name={t.action === "close" ? "check" : "swap"}
                             size={17}
-                            color={t.action === "close" ? c.muted : c.lime}
+                            color={t.action === "close" ? c.muted : c.green}
                           />
                         </View>
                         <View style={{ flex: 1, gap: 5 }}>
@@ -1220,6 +1223,22 @@ export default function App() {
           ) : (
             <>
               <Text style={s.pageTitle}>Seu workspace</Text>
+              <Tap
+                label={mode === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}
+                onPress={toggleTheme}
+                style={s.themeSetting}
+              >
+                <View style={{ flex: 1, gap: 5 }}>
+                  <Text style={s.h3}>Aparência</Text>
+                  <Muted style={{ fontSize: 12 }}>
+                    Tema {mode === "dark" ? "escuro" : "claro"}
+                  </Muted>
+                </View>
+                <Text style={s.themeButtonText}>
+                  Usar {mode === "dark" ? "claro" : "escuro"}
+                </Text>
+                <Icon name="chevron" size={17} color={c.muted} />
+              </Tap>
               <WalletPanel />
               <LiveTradingPanel />
               <View style={s.profileCard}>
@@ -1229,7 +1248,7 @@ export default function App() {
                     { width: 46, height: 46, borderRadius: 23 },
                   ]}
                 >
-                  <Text style={{ color: c.lime, fontSize: 16 }}>JR</Text>
+                  <Text style={{ color: c.ink, fontSize: 16 }}>JR</Text>
                 </View>
                 <View style={{ flex: 1, gap: 5 }}>
                   <Text style={s.h3}>Conta principal</Text>
@@ -1273,7 +1292,7 @@ export default function App() {
                   <Text style={s.h3}>{x.name}</Text>
                   <Text
                     style={{
-                      color: c.lime,
+                      color: c.brand,
                       fontSize: 10,
                       marginTop: 7,
                       marginBottom: 11,
@@ -1328,18 +1347,18 @@ export default function App() {
                 onPress={() => go(n.id)}
                 style={[
                   s.navItem,
-                  page === n.id && { backgroundColor: "#1a201b" },
+                  page === n.id && { backgroundColor: c.raised },
                 ]}
               >
                 <Icon
                   name={n.icon}
                   size={21}
-                  color={page === n.id ? c.lime : c.muted}
+                  color={page === n.id ? c.brand : c.muted}
                 />
                 <Text
                   style={{
                     fontSize: 10,
-                    color: page === n.id ? c.lime : c.muted,
+                    color: page === n.id ? c.brand : c.muted,
                     marginTop: 7,
                   }}
                 >
@@ -1393,7 +1412,7 @@ export default function App() {
                 <View style={{ padding: 24, gap: 22 }}>
                   <View style={{ alignItems: "center", paddingVertical: 14 }}>
                     <View style={s.successCircle}>
-                      <Icon name="shield" color={c.lime} size={30} />
+                      <Icon name="shield" color={c.green} size={30} />
                     </View>
                     <Text
                       style={[s.detailPrice, { fontSize: 36, marginTop: 18 }]}
@@ -1416,7 +1435,7 @@ export default function App() {
                   </View>
                   <View style={s.reviewRow}>
                     <Muted>Tipo de execução</Muted>
-                    <Text style={{ color: c.lime, fontSize: 13 }}>
+                    <Text style={{ color: c.brand, fontSize: 13 }}>
                       Paper · sem transação
                     </Text>
                   </View>
@@ -1479,12 +1498,12 @@ export default function App() {
                             onPress={() => setLeverage(n)}
                             style={[
                               s.leverage,
-                              n === leverage && { backgroundColor: c.lime },
+                              n === leverage && { backgroundColor: c.brand },
                             ]}
                           >
                             <Text
                               style={{
-                                color: n === leverage ? c.bg : c.ink,
+                                color: n === leverage ? c.onBrand : c.ink,
                                 fontSize: 12,
                               }}
                             >
@@ -1563,8 +1582,8 @@ export default function App() {
   );
 }
 
-const s = StyleSheet.create({
-  stage: { flex: 1, backgroundColor: "#050709", alignItems: "center" },
+const createStyles = (c: Palette) => StyleSheet.create({
+  stage: { flex: 1, backgroundColor: c.bg, alignItems: "center" },
   phone: {
     flex: 1,
     width: "100%",
@@ -1575,13 +1594,17 @@ const s = StyleSheet.create({
   desktopPhone: {
     borderLeftWidth: 1,
     borderRightWidth: 1,
-    borderColor: "#1e2429",
+    borderColor: c.line,
   },
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
   muted: { color: c.muted, fontSize: 13 },
   topbar: {
-    height: 64,
+    minHeight: 68,
     paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: c.bg,
+    borderBottomWidth: 1,
+    borderBottomColor: c.line,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -1591,33 +1614,48 @@ const s = StyleSheet.create({
     width: 29,
     height: 29,
     borderRadius: 15,
-    backgroundColor: "#252e22",
+    backgroundColor: c.raised,
     justifyContent: "center",
     alignItems: "center",
   },
   iconButton: { padding: 7 },
-  pill: {
+  themeButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: c.line,
     backgroundColor: c.raised,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 6,
-    alignSelf: "flex-start",
+    borderRadius: 10,
+  },
+  themeButtonText: { color: c.ink, fontSize: 11, fontWeight: "600" },
+  themeSetting: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 16,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: c.line,
+    borderRadius: 14,
+    backgroundColor: c.card,
   },
   balanceCard: {
-    backgroundColor: c.lime,
-    borderRadius: 24,
+    backgroundColor: c.card,
+    borderWidth: 1,
+    borderColor: c.line,
+    borderRadius: 20,
     padding: 23,
     marginTop: 9,
     overflow: "hidden",
   },
   darkLabel: {
-    color: "#45502a",
+    color: c.muted,
     fontSize: 10,
     letterSpacing: 1.5,
     fontWeight: "600",
   },
   balanceValue: {
-    color: "#151a0c",
+    color: c.ink,
     fontSize: 47,
     fontWeight: "600",
     letterSpacing: -2.5,
@@ -1659,7 +1697,7 @@ const s = StyleSheet.create({
     width: 41,
     height: 41,
     borderRadius: 13,
-    backgroundColor: "#282e20",
+    backgroundColor: c.raised,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1675,6 +1713,8 @@ const s = StyleSheet.create({
   perpCard: {
     width: 160,
     backgroundColor: c.card,
+    borderWidth: 1,
+    borderColor: c.line,
     borderRadius: 17,
     padding: 16,
   },
@@ -1684,7 +1724,7 @@ const s = StyleSheet.create({
     gap: 11,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#171d23",
+    borderBottomColor: c.line,
   },
   tokenName: { color: c.ink, fontSize: 13, fontWeight: "500" },
   symbol: { fontSize: 10, color: c.muted, fontWeight: "400" },
@@ -1701,9 +1741,9 @@ const s = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 9,
     paddingBottom: Platform.OS === "ios" ? 28 : 12,
-    backgroundColor: "#0e1318",
+    backgroundColor: c.bg,
     borderTopWidth: 1,
-    borderTopColor: "#1c232a",
+    borderTopColor: c.line,
   },
   navItem: {
     alignItems: "center",
@@ -1737,7 +1777,7 @@ const s = StyleSheet.create({
   },
   filters: { flexDirection: "row", gap: 5, marginTop: 18, marginBottom: 3 },
   filter: { paddingHorizontal: 13, paddingVertical: 10, borderRadius: 18 },
-  filterActive: { backgroundColor: "#252c1e" },
+  filterActive: { backgroundColor: c.raised },
   detailPrice: {
     color: c.ink,
     fontSize: 42,
@@ -1755,6 +1795,8 @@ const s = StyleSheet.create({
     width: "48%",
     flexGrow: 1,
     backgroundColor: c.card,
+    borderWidth: 1,
+    borderColor: c.line,
     borderRadius: 15,
     padding: 16,
   },
@@ -1765,28 +1807,32 @@ const s = StyleSheet.create({
     paddingBottom: Platform.OS === "ios" ? 32 : 20,
     backgroundColor: c.bg,
     borderTopWidth: 1,
-    borderTopColor: "#1d242a",
+    borderTopColor: c.line,
   },
   primary: {
     minHeight: 52,
     paddingHorizontal: 20,
     borderRadius: 28,
-    backgroundColor: c.lime,
+    backgroundColor: c.brand,
     justifyContent: "center",
     alignItems: "center",
   },
-  primaryText: { color: "#11170a", fontSize: 16, fontWeight: "700" },
+  primaryText: { color: c.onBrand, fontSize: 16, fontWeight: "700" },
   dataPanel: {
     padding: 18,
     backgroundColor: c.card,
+    borderWidth: 1,
+    borderColor: c.line,
     borderRadius: 16,
     marginTop: 25,
   },
   refresh: { padding: 8 },
   agentCard: {
     padding: 18,
-    borderRadius: 19,
+    borderRadius: 16,
     backgroundColor: c.card,
+    borderWidth: 1,
+    borderColor: c.line,
     marginBottom: 13,
   },
   toggle: {
@@ -1794,16 +1840,16 @@ const s = StyleSheet.create({
     height: 25,
     borderRadius: 14,
     padding: 3,
-    backgroundColor: "#383d43",
+    backgroundColor: c.line,
     justifyContent: "center",
   },
   toggleKnob: {
     width: 19,
     height: 19,
     borderRadius: 10,
-    backgroundColor: "#a0a5ab",
+    backgroundColor: c.muted,
   },
-  progress: { height: 3, borderRadius: 2, backgroundColor: "#30352d" },
+  progress: { height: 3, borderRadius: 2, backgroundColor: c.raised },
   agentRun: {
     flexDirection: "row",
     alignItems: "center",
@@ -1812,7 +1858,7 @@ const s = StyleSheet.create({
     paddingTop: 19,
     marginTop: 17,
     borderTopWidth: 1,
-    borderTopColor: "#292f30",
+    borderTopColor: c.line,
   },
   emergency: {
     flexDirection: "row",
@@ -1821,7 +1867,7 @@ const s = StyleSheet.create({
     gap: 10,
     padding: 17,
     borderWidth: 1,
-    borderColor: "#593035",
+    borderColor: c.red,
     borderRadius: 14,
     marginTop: 4,
   },
@@ -1831,15 +1877,15 @@ const s = StyleSheet.create({
     gap: 8,
     paddingVertical: 10,
     paddingHorizontal: 20,
-    backgroundColor: "#2a181e",
+    backgroundColor: c.negativeTint,
   },
   toast: {
     marginHorizontal: 20,
     marginBottom: 10,
     padding: 12,
     borderWidth: 1,
-    borderColor: "#343c30",
-    backgroundColor: "#1d241b",
+    borderColor: c.line,
+    backgroundColor: c.raised,
     borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -1857,7 +1903,7 @@ const s = StyleSheet.create({
     gap: 8,
     padding: 10,
   },
-  smallActionText: { color: c.lime, fontSize: 12 },
+  smallActionText: { color: c.brand, fontSize: 12 },
   position: {
     padding: 16,
     borderRadius: 15,
@@ -1874,7 +1920,7 @@ const s = StyleSheet.create({
   historyRow: {
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#1d2329",
+    borderBottomColor: c.line,
     flexDirection: "row",
     gap: 12,
     alignItems: "center",
@@ -1901,12 +1947,12 @@ const s = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "flex-end",
-    backgroundColor: "#000000a6",
+    backgroundColor: c.overlay,
   },
   sheet: {
     width: "100%",
     maxWidth: 480,
-    backgroundColor: "#13171d",
+    backgroundColor: c.card,
     borderTopLeftRadius: 27,
     borderTopRightRadius: 27,
     paddingBottom: Platform.OS === "ios" ? 20 : 0,
@@ -1915,7 +1961,7 @@ const s = StyleSheet.create({
     width: 34,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#4c5158",
+    backgroundColor: c.line,
     alignSelf: "center",
     marginTop: 10,
   },
@@ -1966,7 +2012,7 @@ const s = StyleSheet.create({
   successCircle: {
     width: 64,
     height: 64,
-    backgroundColor: "#29301f",
+    backgroundColor: c.raised,
     borderRadius: 32,
     justifyContent: "center",
     alignItems: "center",
