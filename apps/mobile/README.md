@@ -1,48 +1,35 @@
-# Orbit — mobile agent trading sandbox
+# Orbit — Expo trading workspace
 
-Aplicativo Expo / React Native com suporte web, Android e iOS a partir da mesma base TypeScript. Esta é uma primeira base funcional **paper trading**, não uma plataforma completa de execução real.
+Mobile-first Portuguese interface for web, Android and iOS, with separate **paper** and **connected** trading flows. The portfolio/markets/agents remain an explicitly illustrative simulator; they never spend a real wallet balance.
 
-## Executar
+## Run and validate
 
-Na raiz do repositório, Node 22:
+At repository root, Node22.13+:
 
 ```bash
 npm ci --ignore-scripts
-npm start             # Metro / Expo Go, Android ou iOS em ambiente apropriado
-npm run web           # Expo web em :8081
+npm start
+npm run web
 npm run typecheck
 npm test
-npm run build:web     # saída apps/mobile/dist
+npm run build:web
+npm run api
 ```
 
-Não há variáveis secretas, conexão de carteira ou transações. Não informe seed phrase ou chave privada. Builds nativos e testes em aparelhos não foram realizados neste ambiente Linux; o export web é o alvo verificado.
+Web export: `apps/mobile/dist`. API setup/contracts/security: [backend README](../api/README.md), [venue adapters](../api/VENUES.md), [environment template](../../.env.example). Public `EXPO_PUBLIC_PRIVY_APP_ID`, `EXPO_PUBLIC_PRIVY_CLIENT_ID` and optionally `EXPO_PUBLIC_API_URL` are build-time settings. Private API keys never go in these variables.
 
-## Funcionalidades desta versão
+Native Privy requires an **Expo development build, not Expo Go**. Install native toolchains and run `npx expo run:android` / `npx expo run:ios` inside this app, or use your EAS development-build pipeline. Platform-specific entries load Privy polyfills first on native; web uses its separate SDK. Scheme: `orbit-agent-trading`. The Privy app must authorize your actual web origin/native app identifiers and email login/embedded wallets. Configure an externally reachable HTTPS API for native. Device builds/login/signatures were not verified on this Linux machine.
 
-- Interface adaptativa em português: visão geral, busca e filtros de mercados, terminal, agentes, portfólio e transparência de conexões.
-- US$ 10.000 fictícios; compras spot e long/short perp com margem isolada de 1–10×, fechamento e PnL marcado às cotações da sessão.
-- Três estratégias determinísticas, uma ordem por clique. Orçamento cumulativo por agente, teto por ordem, limite de alavancagem e pausa individual.
-- Parada de emergência bloqueia novas entradas manuais e de agentes; encerramentos permanecem disponíveis.
-- Persistência local da conta via AsyncStorage, sem sincronização ou backend.
-- Comandos locais `status`, `risco` e `sol`; o copiloto não usa um LLM.
+## Connected flow
 
-## Dados e cobertura real
+Open the settings tab: Privy email OTP, sign-out, Ethereum/Solana wallet creation, current bearer identity verification. Connected trading separately loads the authenticated server's balances, risk and orders. Spot ticket: mint addresses and **atomic-unit** input, route review, explicit wallet signing then backend dispatch. Perp ticket: decimal size/limit price, exact typed-data review/signing, then dispatch. Review/order reconciliation/cancel apply to server intents, not the local paper history. No configuration means an explicit demo/unavailable state, not fake authentication. Dispatch is disabled on the server by default; missing credentials fail closed.
 
-Os oito mercados iniciais têm preços e históricos **ilustrativos**. O botão de atualização consulta apenas os endpoints públicos abaixo, sem chave:
+## Paper/data behavior
 
-- Hyperliquid: `POST https://api.hyperliquid.xyz/info`, `{"type":"allMids"}` para BTC, ETH e SOL.
-- DexScreener: `GET https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112`, escolhendo o par válido SOL/Solana de maior liquidez.
+$10,000 fictitious account, spot/long/short, isolated simulated margin1–10×, PnL, manual one-step deterministic agents, cumulative notional budgets, kill switch, history and AsyncStorage persistence. The copiloto is not an LLM. Eight seed markets, candles, changes/volumes and pool labels are illustrative. Optional public Hyperliquid BTC/ETH/SOL mids and DexScreener SOL snapshots update only quotes, not the rest of the simulated chart/feed. Quotes are not persisted; reload can revalue paper positions against seed prices until refreshed. No continuous liquidation, funding, fees, oracle or MEV guarantee is simulated.
 
-Falhas preservam os preços anteriores e mostram erro. A atualização é um snapshot manual, não um feed WebSocket. O preço atualizado não torna as variações, volumes e gráficos ao vivo; eles continuam demo. Cotações ao vivo não são persistidas, apenas a conta. Ao reabrir, posições são reavaliadas pelos preços demo até nova atualização, portanto o PnL pode mudar. O histórico é o registro de entradas; fechamentos removem a posição e creditam caixa, sem diário de fechamento separado.
+Jupiter is the real Solana adapter, Hyperliquid the perpetual adapter; live access has not been exercised with funds. No all-token/all-pool coverage, direct Pump/Meteora/GMGN integration or autonomous delegated AI execution is claimed. Never enter a seed phrase/private key in the app.
 
-Solana, Pump.fun, Meteora, Raydium e Jupiter são referências de mercados demonstrativos, não integrações de execução. Hyperliquid é leitura de preços, não envio de ordens. GMGN não está integrado; **não há paridade de cobertura de todas as redes, tokens ou pools**.
+## Dependency security
 
-## Modelo de risco e limites
-
-`amount` é margem USD; exposição = margem × alavancagem. Spot só admite long 1×. Agentes consomem orçamento por notional de entrada, sem reembolso no fechamento. Perdas simuladas de cada posição são limitadas à margem. Não existe liquidação contínua, taxas, funding, spread, slippage, MEV, RPC, oráculos, custódia, autenticação ou reconciliação on-chain. Não utilizar resultados do simulador como previsão de execução real.
-
-Antes de oferecer execução real: backend autenticado, políticas de autorização e limites do lado servidor, carteira não custodial e aprovação de assinatura, integração oficial de cada venue, indexação verificável, simulação de transação, proteção MEV, auditoria e reconciliação, feeds e funding/liquidação, testes em testnet e revisão de segurança. IA autônoma e suporte multichain são trabalho futuro, não funcionalidades entregues.
-
-## Segurança de dependências
-
-A auditoria inicial revelou 14 advisories. Foi aplicado override PostCSS compatível; restam 13 (1 high, 11 moderate, 1 low) na cadeia de ferramentas Expo/Metro: image-size, glob/minimatch e deepmerge. `npm audit` ainda falha. Não foram forçadas versões major incompatíveis. Não processe assets/configurações de fontes não confiáveis; revisar atualização do SDK e advisories antes de distribuição em produção.
+Expo58/React19.3/RN0.88, SDK-isolated providers. Compatible overrides patch fingerprint minimatch, viem2, ws8, abitype1 and WalletConnect utils2. Workspace audit still has **23 advisories (13 high/10 moderate)** in upstream zod3/uuid/stream-json chains. See backend README. Not certified production-safe; no unsafe major overrides or hidden vulnerable functionality removal. One optional Solana dependency declares Node>=24, so validate the native release toolchain accordingly.

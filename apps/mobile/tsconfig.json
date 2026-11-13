@@ -1,5 +1,5 @@
 {
   "extends": "expo/tsconfig.base",
-  "compilerOptions": {"strict": true, "types": ["react", "node"]},
+  "compilerOptions": { "strict": true, "types": ["react", "node"] },
   "include": ["**/*.ts", "**/*.tsx"]
 }

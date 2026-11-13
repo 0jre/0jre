@@ -2,10 +2,12 @@
   "expo": {
     "name": "Orbit — Agent Trading",
     "slug": "orbit-agent-trading",
+    "scheme": "orbit-agent-trading",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "ios": {
+      "bundleIdentifier": "dev.orbit.papertrading",
       "supportsTablet": true
     },
     "android": {
@@ -15,6 +17,10 @@
       "bundler": "metro",
       "name": "Orbit Agent Trading"
     },
-    "plugins": []
+    "plugins": [
+      "expo-secure-store",
+      "expo-web-browser",
+      "react-native-quick-crypto"
+    ]
   }
 }

@@ -1,71 +1,1961 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import Svg, { Line, Polyline } from 'react-native-svg';
-import { Account, Market, accountEquity, closePosition, createAccount, executeOrder, markets as seeds, runAgent, setAgentActive, setKillSwitch } from './src/domain';
-import { fetchPublicQuotes } from './src/services/marketData';
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import { StatusBar } from "expo-status-bar";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { WalletPanel } from "./src/auth/WalletPanel";
+import { LiveTradingPanel } from "./src/trading/LiveTradingPanel";
+import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
+import {
+  Account,
+  Market,
+  accountEquity,
+  closePosition,
+  createAccount,
+  executeOrder,
+  markets as initialMarkets,
+  runAgent,
+  setAgentActive,
+  setKillSwitch,
+} from "./src/domain";
+import { fetchPublicQuotes } from "./src/services/marketData";
 
-const C = {bg:'#090d13',panel:'#111720',line:'#232c38',muted:'#8b98aa',text:'#f1f5fa',lime:'#d6f55b',green:'#83dbb2',red:'#ff7d8d'};
-const money = (n:number) => n.toLocaleString('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2});
-const price = (n:number) => '$'+n.toLocaleString('en-US',{maximumFractionDigits:n<1?7:2});
-const KEY = 'orbit.paper.v1';
-let saveQueue = Promise.resolve();
-type Tab = 'Visão geral'|'Mercados'|'Agentes'|'Portfólio'|'Conexões';
-const tabs: {name:Tab,icon:string}[] = [{name:'Visão geral',icon:'◈'},{name:'Mercados',icon:'⌁'},{name:'Agentes',icon:'✧'},{name:'Portfólio',icon:'▣'},{name:'Conexões',icon:'⊞'}];
-
-function Label({children,style}: {children:React.ReactNode,style?:object}) {return <Text style={[s.label,style]}>{children}</Text>}
-function Button({title,onPress,kind='neutral',disabled=false}: {title:string,onPress:()=>void,kind?:'neutral'|'lime'|'red',disabled?:boolean}) {return <Pressable accessibilityRole="button" accessibilityLabel={title} disabled={disabled} onPress={onPress} style={({pressed})=>[s.button,kind==='lime'&&s.limeButton,kind==='red'&&s.redButton,(pressed||disabled)&&{opacity:.55}]}><Text style={[s.buttonText,kind==='lime'&&{color:C.bg},kind==='red'&&{color:C.red}]}>{title}</Text></Pressable>}
-function Badge({text,color=C.lime}: {text:string,color?:string}) {return <View style={[s.badge,{borderColor:color+'40'}]}><Text style={{color,fontSize:10,fontWeight:'700',letterSpacing:1}}>{text}</Text></View>}
-function Chart({values,color=C.lime,large=false}: {values:number[],color?:string,large?:boolean}) {
-  const lo=Math.min(...values),span=Math.max(...values)-lo||1;
-  const points=values.map((n,i)=>`${i/(values.length-1)*600},${150-(n-lo)/span*125}`).join(' ');
-  return <Svg accessibilityLabel="Gráfico ilustrativo, não é histórico ao vivo" width="100%" height={large?200:44} viewBox="0 0 600 170" preserveAspectRatio="none">{large&&[25,65,105,145].map(y=><Line key={y} x1="0" x2="600" y1={y} y2={y} stroke={C.line} strokeDasharray="4 6"/>)}<Polyline points={points} fill="none" stroke={color} strokeWidth={large?2.5:5} vectorEffect="non-scaling-stroke"/></Svg>
+const c = {
+  bg: "#080c10",
+  card: "#15191f",
+  raised: "#20242a",
+  line: "#292e34",
+  ink: "#f1f3f5",
+  muted: "#8b9099",
+  lime: "#d8ef80",
+  green: "#b2e35b",
+  red: "#ff525e",
+};
+const money = (v: number) =>
+  v.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  });
+const price = (v: number) =>
+  "$" + v.toLocaleString("en-US", { maximumFractionDigits: v < 1 ? 7 : 2 });
+const KEY = "orbit.paper.v1";
+let saves = Promise.resolve();
+type Page = "portfolio" | "market" | "agents" | "orders" | "settings";
+type Glyph =
+  | "wallet"
+  | "market"
+  | "agents"
+  | "orders"
+  | "search"
+  | "arrow"
+  | "close"
+  | "back"
+  | "swap"
+  | "plus"
+  | "shield"
+  | "sliders"
+  | "chevron"
+  | "eye"
+  | "pause"
+  | "play"
+  | "check";
+const paths: Record<Glyph, string> = {
+  wallet: "M3 6h17v14H3z M3 6V3h14v3 M15 11h6v5h-6z",
+  market: "M4 19V11 M10 19V5 M16 19v-8 M22 19V2",
+  agents: "M8 5h8l4 4v9l-4 3H8l-4-3V9z M9 12v2 M15 12v2 M12 2v3",
+  orders: "M6 3h12v19l-3-2-3 2-3-2-3 2z M9 8h6 M9 12h6 M9 16h3",
+  search: "M20 20l-5-5 M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0",
+  arrow: "M5 12h14 M13 6l6 6-6 6",
+  close: "M6 6l12 12 M18 6 6 18",
+  back: "M15 5l-7 7 7 7",
+  swap: "M3 7h17 M15 2l5 5-5 5 M21 17H4 M9 12l-5 5 5 5",
+  plus: "M12 4v16 M4 12h16",
+  shield: "m12 2 8 4v6c0 5-8 10-8 10S4 17 4 12V6z M12 7v6 M12 16v1",
+  sliders: "M4 7h16 M4 17h16 M8 4v6 M16 14v6",
+  chevron: "m9 5 7 7-7 7",
+  eye: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12 M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0",
+  pause: "M8 4v16 M16 4v16",
+  play: "m7 4 13 8-13 8z",
+  check: "m5 12 4 4 10-10",
+};
+function Icon({
+  name,
+  size = 22,
+  color = c.ink,
+}: {
+  name: Glyph;
+  size?: number;
+  color?: string;
+}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d={paths[name]}
+        stroke={color}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
 }
-function Coin({market}: {market:Market}) {return <View style={[s.coin,{backgroundColor:market.color+'22'}]}><Text style={{fontSize:17,color:market.color,fontWeight:'800'}}>{market.symbol.slice(0,1)}</Text></View>}
+function Tap({
+  label,
+  onPress,
+  children,
+  style,
+  disabled = false,
+}: {
+  label: string;
+  onPress: () => void;
+  children: React.ReactNode;
+  style?: object;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      disabled={disabled}
+      style={({ pressed }) => [
+        style,
+        (pressed || disabled) && { opacity: 0.42 },
+      ]}
+    >
+      {children}
+    </Pressable>
+  );
+}
+function Muted({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: object;
+}) {
+  return <Text style={[s.muted, style]}>{children}</Text>;
+}
+function Pill({ text, bright = false }: { text: string; bright?: boolean }) {
+  return (
+    <View style={[s.pill, bright && { backgroundColor: "#29301c" }]}>
+      <Text
+        style={{
+          fontSize: 10,
+          fontWeight: "600",
+          color: bright ? c.lime : c.muted,
+        }}
+      >
+        {text}
+      </Text>
+    </View>
+  );
+}
+function Token({ m, size = 38 }: { m: Market; size?: number }) {
+  const sol = m.symbol === "SOL";
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: m.color + "24",
+        justifyContent: "center",
+        alignItems: "center",
+      }}
+    >
+      {sol ? (
+        <Svg width={size * 0.65} height={size * 0.65} viewBox="0 0 30 30">
+          <Path
+            d="M7 5h21l-5 5H2z M2 13h21l5 5H7z M7 21h21l-5 5H2z"
+            fill="#90d9bc"
+          />
+        </Svg>
+      ) : (
+        <Text
+          style={{ fontSize: size * 0.51, color: m.color, fontWeight: "700" }}
+        >
+          {m.symbol === "BTC"
+            ? "₿"
+            : m.symbol === "ETH"
+              ? "Ξ"
+              : m.symbol.slice(0, 1)}
+        </Text>
+      )}
+    </View>
+  );
+}
+function Candles({ m }: { m: Market }) {
+  const values = m.history;
+  const low = Math.min(...values) * 0.995;
+  const range = Math.max(...values) * 1.005 - low;
+  const y = (v: number) => 195 - ((v - low) / range) * 170;
+  return (
+    <View style={{ height: 252, marginTop: 16 }}>
+      <Svg
+        width="100%"
+        height={224}
+        viewBox="0 0 360 224"
+        preserveAspectRatio="none"
+      >
+        {[20, 70, 120, 170, 220].map((v) => (
+          <Line
+            key={v}
+            x1={0}
+            x2={360}
+            y1={v}
+            y2={v}
+            stroke="#242930"
+            strokeWidth={0.7}
+          />
+        ))}
+        {values.slice(1).map((v, i) => {
+          const open = values[i],
+            rise = v >= open,
+            x = 8 + i * (340 / (values.length - 1));
+          const wick = range * (0.035 + (i % 3) * 0.015);
+          return (
+            <React.Fragment key={i}>
+              <Line
+                x1={x}
+                x2={x}
+                y1={y(Math.max(v, open) + wick)}
+                y2={y(Math.min(v, open) - wick)}
+                stroke={rise ? c.green : c.red}
+              />
+              <Rect
+                x={x - 2.6}
+                y={Math.min(y(v), y(open))}
+                width={5.2}
+                height={Math.max(2, Math.abs(y(v) - y(open)))}
+                fill={rise ? c.green : c.red}
+              />
+            </React.Fragment>
+          );
+        })}
+        <Line
+          x1={0}
+          x2={360}
+          y1={y(values[values.length - 1])}
+          y2={y(values[values.length - 1])}
+          stroke="#79818b"
+          strokeDasharray="3 4"
+        />
+      </Svg>
+      <View style={[s.row, { justifyContent: "space-between", paddingTop: 8 }]}>
+        <Muted style={{ fontSize: 10 }}>12:00</Muted>
+        <Muted style={{ fontSize: 10 }}>14:00</Muted>
+        <Muted style={{ fontSize: 10 }}>16:00</Muted>
+        <Muted style={{ fontSize: 10 }}>18:00</Muted>
+      </View>
+    </View>
+  );
+}
 
 export default function App() {
-  const {width}=useWindowDimensions(); const wide=width>=1100; const desktop=width>=760;
-  const [tab,setTab]=useState<Tab>('Visão geral'); const [account,setAccount]=useState<Account>(createAccount);
-  const [markets,setMarkets]=useState(seeds); const [selected,setSelected]=useState(seeds[0]);
-  const [filter,setFilter]=useState('Todos'); const [query,setQuery]=useState(''); const [amount,setAmount]=useState('100'); const [leverage,setLeverage]=useState(1);
-  const [notice,setNotice]=useState(''); const [loaded,setLoaded]=useState(false); const [refreshing,setRefreshing]=useState(false); const [quoteStatus,setQuoteStatus]=useState('Preços de demonstração');
-  const [quoteTime,setQuoteTime]=useState(''); const [command,setCommand]=useState(''); const [reply,setReply]=useState('Seu copiloto de simulação. Consulte “status”, “risco” ou “sol”. Nenhum modelo de IA conectado.');
-  useEffect(()=>{AsyncStorage.getItem(KEY).then(raw=>{if(raw){const saved=JSON.parse(raw);if(saved.version===1&&Number.isFinite(saved.account?.cash)&&saved.account.cash>=0&&Array.isArray(saved.account.positions)&&Array.isArray(saved.account.trades)&&Array.isArray(saved.account.agents)&&typeof saved.account.killed==='boolean')setAccount(saved.account);else throw new Error('invalid');}}).catch(()=>setNotice('Não foi possível restaurar a sessão local. Uma nova conta demo foi criada.')).finally(()=>setLoaded(true));},[]);
-  useEffect(()=>{if(loaded){const value=JSON.stringify({version:1,account});saveQueue=saveQueue.then(()=>AsyncStorage.setItem(KEY,value)).catch(()=>setNotice('Não foi possível salvar no dispositivo. Esta sessão continua apenas em memória.'));}},[account,loaded]);
-  const act=(fn:()=>Account,message:string)=>{try{setAccount(fn());setNotice(message);}catch(e){setNotice(e instanceof Error?e.message:'Ação recusada.');}};
-  const choose=(m:Market)=>{setSelected(m);setLeverage(1);if(!wide)setTab('Mercados');};
-  const refresh=async()=>{setRefreshing(true);try{const result=await fetchPublicQuotes();setMarkets(previous=>previous.map(m=>{const q=result.quotes.find(q=>q.symbol===m.symbol&&q.venue===(m.kind==='perp'?'Hyperliquid':'Solana'));return q?{...m,price:q.price}:m;}));const q=result.quotes.find(q=>q.symbol===selected.symbol&&q.venue===(selected.kind==='perp'?'Hyperliquid':'Solana'));if(q)setSelected({...selected,price:q.price});setQuoteTime(new Date().toLocaleTimeString('pt-BR'));setQuoteStatus(result.quotes.length?'Snapshot público · demais preços demo':'Sem atualização · preços anteriores');setNotice(result.errors.length?result.errors.join(' | '):'Cotações públicas atualizadas. Gráficos e métricas continuam ilustrativos.');}catch{setNotice('Cotações indisponíveis. Preços anteriores preservados.');}finally{setRefreshing(false);}};
-  const equity=accountEquity(account,markets); const active=account.agents.filter(a=>a.active).length;
-  const visible=markets.filter(m=>(filter==='Todos'||(filter==='Memecoins'?m.kind==='spot'&&m.symbol!=='SOL':filter==='Perps'?m.kind==='perp':m.kind==='spot'))&&`${m.name} ${m.symbol} ${m.venue}`.toLowerCase().includes(query.toLowerCase()));
-  const sendCommand=()=>{const q=command.trim().toLowerCase();if(!q)return;setReply(q.includes('risco')?'Proteções: margem limitada ao saldo demo, alavancagem máxima de 10×, orçamento e teto por agente. O botão de emergência bloqueia novas entradas; encerramentos continuam permitidos.':q.includes('sol')?'SOL está disponível no mercado spot demonstrativo e em perps Hyperliquid. Cotações públicas são opcionais; não há roteamento nem assinatura de transações.':q.includes('status')?`${active} agentes habilitados. ${account.positions.length} posições simuladas. Saldo disponível: ${money(account.cash)}. Execução ${account.killed?'bloqueada':'liberada em modo paper'}.`:'Comando não reconhecido. Experimente “status”, “risco” ou “sol”. Este terminal é determinístico, não um chat de IA.');setCommand('');};
-  const heading=tab==='Visão geral'?'Seu próximo movimento.':tab==='Mercados'?'Encontre sua próxima oportunidade.':tab==='Agentes'?'Sua equipe. Suas regras.':tab==='Portfólio'?'Tudo sob seu controle.':'Uma camada, muitos mercados.';
-  const marketList=<View style={s.card}>
-    <View style={s.sectionHeader}><View><Text style={s.h2}>Radar de mercado</Text><Label>Explore o ecossistema, sem sair da órbita.</Label></View><Badge text="DEMO" color={C.muted}/></View>
-    <View style={[s.row,{paddingHorizontal:18,gap:6,flexWrap:'wrap'}]}>{['Todos','Memecoins','Spot','Perps'].map(f=><Pressable accessibilityRole="button" key={f} onPress={()=>setFilter(f)} style={[s.chip,filter===f&&s.chipActive]}><Text style={{color:filter===f?C.lime:C.muted,fontSize:12}}>{f}</Text></Pressable>)}</View>
-    <TextInput accessibilityLabel="Buscar token ou protocolo" placeholder="Buscar token ou protocolo…" placeholderTextColor={C.muted} value={query} onChangeText={setQuery} style={[s.input,{margin:18,marginBottom:0}]}/>
-    <View style={[s.row,s.tableHead]}><Label style={{flex:1}}>ATIVO / PROTOCOLO</Label><Label style={{width:100,textAlign:'right'}}>PREÇO</Label>{desktop&&<Label style={{width:90,textAlign:'right'}}>24H DEMO</Label>}</View>
-    {visible.map(m=><Pressable accessibilityRole="button" accessibilityLabel={`Selecionar ${m.symbol} ${m.venue}`} onPress={()=>choose(m)} key={m.id} style={[s.marketRow,selected.id===m.id&&{backgroundColor:'#182128'}]}><Coin market={m}/><View style={{flex:1}}><Text style={s.strong}>{m.symbol} <Text style={s.small}>{m.kind==='perp'?'PERP':''}</Text></Text><Label>{m.venue}</Label></View>{wide&&<View style={{width:86,marginRight:26}}><Chart values={m.history} color={m.change>=0?C.green:C.red}/></View>}<View style={{width:100,alignItems:'flex-end'}}><Text style={s.priceSmall}>{price(m.price)}</Text>{!desktop&&<Text style={{color:m.change>=0?C.green:C.red,fontSize:11}}>{m.change>=0?'+':''}{m.change.toFixed(2)}% demo</Text>}</View>{desktop&&<Text style={{width:90,textAlign:'right',color:m.change>=0?C.green:C.red,fontSize:13}}>{m.change>=0?'+':''}{m.change.toFixed(2)}%</Text>}</Pressable>)}
-    {!visible.length&&<Label style={{padding:24}}>Nenhum mercado encontrado.</Label>}
-    <Label style={{padding:18,fontSize:10}}>Lista demonstrativa · não representa cobertura de toda a Solana ou GMGN.</Label>
-  </View>;
-  const ticket=<View style={s.card}><View style={s.sectionHeader}><Text style={s.h2}>Terminal</Text><Badge text="PAPER"/></View><View style={{paddingHorizontal:20,paddingBottom:20,gap:16}}><View style={s.row}><Coin market={selected}/><View style={{flex:1}}><Text style={s.h2}>{selected.symbol} <Text style={s.small}>{selected.kind.toUpperCase()}</Text></Text><Label>{selected.venue}</Label></View><Text style={s.h2}>{price(selected.price)}</Text></View><Chart values={selected.history} large/><View style={[s.row,{justifyContent:'space-between'}]}><Label style={{fontSize:10}}>HISTÓRICO ILUSTRATIVO</Label><Label style={{fontSize:10}}>NÃO É AO VIVO</Label></View><View style={s.divider}/><Label>Margem simulada (USD)</Label><TextInput accessibilityLabel="Margem simulada em USD" inputMode="decimal" keyboardType="decimal-pad" value={amount} onChangeText={setAmount} style={s.input}/><View style={s.row}>{['50','100','500'].map(v=><Button key={v} title={`$${v}`} onPress={()=>setAmount(v)}/>)}</View>{selected.kind==='perp'&&<><Label>Alavancagem isolada</Label><View style={s.row}>{[1,2,5,10].map(v=><Button key={v} title={`${v}×`} kind={v===leverage?'lime':'neutral'} onPress={()=>setLeverage(v)}/>)}</View></>}<View style={[s.row,{justifyContent:'space-between'}]}><Label>Exposição</Label><Text style={s.strong}>{money((Number(amount)||0)*leverage)}</Text></View><View style={[s.row,{flexWrap:'wrap'}]}><Button title={selected.kind==='spot'?'Comprar · demo':'Long · demo'} kind="lime" disabled={account.killed} onPress={()=>act(()=>executeOrder(account,selected,'long',Number(amount),leverage),'Compra simulada registrada. Nenhuma transação enviada.')}/>{selected.kind==='perp'&&<Button title="Short · demo" kind="red" disabled={account.killed} onPress={()=>act(()=>executeOrder(account,selected,'short',Number(amount),leverage),'Short simulado registrado. Nenhuma transação enviada.')}/>}</View><Label style={{fontSize:11,lineHeight:18}}>Sem dinheiro real. Sem carteira conectada. Preços podem ser demonstrativos ou snapshots; não há motor de liquidação contínua.</Label></View></View>;
-  const agents=<View style={s.card}><View style={s.sectionHeader}><View><Text style={s.h2}>Agent control</Text><Label>Estratégias determinísticas · execução manual</Label></View><Text style={{color:C.lime,fontSize:12}}>{active} habilitados</Text></View>{account.agents.map((a,i)=><View key={a.id} style={{padding:20,borderTopWidth:1,borderTopColor:C.line,gap:14}}><View style={s.row}><View style={[s.agentIcon,{backgroundColor:['#283129','#26273e','#352c24'][i%3]}]}><Text style={{color:C.lime,fontSize:23}}>✧</Text></View><View style={{flex:1}}><Text style={s.strong}>{a.name}</Text><Label>{a.strategy}</Label></View><Badge text={a.active?'PRONTO':'PAUSADO'} color={a.active?C.green:C.muted}/></View><View style={[s.row,{justifyContent:'space-between',flexWrap:'wrap'}]}><Label>Orçamento {money(a.spent)} / {money(a.budget)}</Label><Label>Teto {money(a.maxOrder)} · {a.maxLeverage}×</Label></View><View style={s.row}><Button title={a.active?`Pausar ${a.name}`:`Ativar ${a.name}`} onPress={()=>act(()=>setAgentActive(account,a.id,!a.active),'Estado do agente atualizado.')}/><Button title={`Simular ${a.name}`} disabled={!a.active||account.killed} onPress={()=>act(()=>runAgent(account,a.id,selected),`${a.name}: uma ordem simulada em ${selected.symbol}.`)}/></View></View>)}</View>;
-  const positions=<View style={s.card}><View style={s.sectionHeader}><Text style={s.h2}>Posições abertas</Text><Badge text={`${account.positions.length} PAPER`} color={C.muted}/></View>{!account.positions.length?<View style={{padding:28,gap:10}}><Text style={{fontSize:28,color:C.muted}}>◎</Text><Text style={s.strong}>Um novo ponto de partida.</Text><Label>Abra uma operação no terminal para acompanhar sua posição aqui.</Label></View>:account.positions.map(p=>{const m=markets.find(m=>m.id===p.marketId)!;const pnl=(m.price-p.entry)*p.quantity*(p.side==='long'?1:-1);return <View key={p.id} style={[s.marketRow,{flexWrap:'wrap'}]}><View style={{flex:1,minWidth:120}}><Text style={s.strong}>{m.symbol} · {p.side.toUpperCase()} {p.leverage}×</Text><Label>Margem {money(p.margin)} · entrada {price(p.entry)}</Label></View><Text style={{color:pnl>=0?C.green:C.red}}>{money(pnl)}</Text><Button title={`Encerrar ${m.symbol} ${p.id}`} onPress={()=>act(()=>closePosition(account,p.id,m),'Posição demo encerrada.')}/></View>})}</View>;
-  if(!loaded)return <View style={[s.root,{justifyContent:'center',alignItems:'center'}]}><ActivityIndicator color={C.lime}/><Text style={s.text}>Restaurando sua órbita…</Text></View>;
-  return <View style={s.root}><StatusBar style="light"/>{desktop&&<View style={s.sidebar}><View style={[s.row,{marginBottom:48}]}><Text style={s.logo}>◉</Text><Text style={s.brand}>orbit<Text style={{color:C.lime}}>.</Text></Text></View><Label style={{fontSize:10,letterSpacing:2,marginBottom:16}}>WORKSPACE</Label>{tabs.map(t=><Pressable accessibilityRole="button" key={t.name} onPress={()=>setTab(t.name)} style={[s.nav,tab===t.name&&s.navActive]}><Text style={{color:tab===t.name?C.lime:C.muted,fontSize:21,width:28}}>{t.icon}</Text><Text style={{color:tab===t.name?C.text:C.muted,fontSize:13}}>{t.name}</Text></Pressable>)}<View style={{flex:1}}/><View style={s.sidebarNote}><Badge text="SANDBOX"/><Label style={{lineHeight:19,marginTop:12}}>Explore estratégias.{'\n'}Preserve seu capital.</Label></View><Label style={{fontSize:10,marginTop:24}}>ORBIT TERMINAL / V0.1</Label></View>}
-    <View style={{flex:1}}><View style={[s.topbar,{paddingHorizontal:desktop?32:18}]}>{!desktop?<View style={s.row}><Text style={[s.logo,{fontSize:26}]}>◉</Text><Text style={s.brand}>orbit.</Text></View>:<Label>Workspace pessoal <Text style={{color:C.text}}> / {tab}</Text></Label>}<View style={s.row}><Badge text="SIMULAÇÃO"/><View style={s.avatar}><Text style={{color:C.lime,fontSize:12,fontWeight:'700'}}>JR</Text></View></View></View>
-    <ScrollView contentContainerStyle={{padding:desktop?32:18,paddingBottom:40}}><View style={{width:'100%',maxWidth:1500,alignSelf:'center',gap:22}}><View style={[s.row,{justifyContent:'space-between',flexWrap:'wrap',gap:16}]}><View><Label style={{letterSpacing:2,fontSize:10,marginBottom:10}}>THE AGENT-FIRST TRADING TERMINAL</Label><Text style={[s.title,{fontSize:desktop?32:27}]}>{heading}</Text><Label style={{marginTop:8}}>Solana, memecoins & perps. Um workspace para experimentar.</Label></View><Button title={account.killed?'Retomar entradas demo':'Parar todas as entradas'} kind="red" onPress={()=>act(()=>setKillSwitch(account,!account.killed),account.killed?'Entradas demo liberadas.':'Emergência ativada. Novas entradas bloqueadas; encerramentos permitidos.')}/></View>
-    {account.killed&&<View style={s.warning}><Text style={{color:C.red,fontSize:13}}>EMERGÊNCIA ATIVA · Novas ordens manuais e de agentes bloqueadas.</Text></View>}
-    {!!notice&&<Pressable accessibilityRole="button" accessibilityLabel="Dispensar aviso" onPress={()=>setNotice('')} style={s.notice}><Text accessibilityLiveRegion="polite" style={{color:C.text,flex:1,fontSize:12,lineHeight:19}}>{notice}</Text><Text style={s.label}>×</Text></Pressable>}
-    {tab==='Visão geral'&&<><View style={[s.row,{alignItems:'stretch',flexWrap:'wrap',gap:14}]}><View style={[s.balance,{minWidth:250,flex:2}]}><View style={[s.row,{justifyContent:'space-between'}]}><Text style={s.darkLabel}>PATRIMÔNIO SIMULADO</Text><Text style={{fontSize:22,color:'#394315'}}>◈</Text></View><Text style={s.balanceValue}>{money(equity)}</Text><Text style={s.darkLabel}>Conta paper · capital inicial de US$ 10.000</Text><View style={[s.row,{marginTop:22,justifyContent:'space-between'}]}><Text style={{color:'#394315',fontSize:12}}>Disponível {money(account.cash)}</Text><Text style={{color:'#394315',fontSize:12}}>USD ↗</Text></View></View><View style={[s.stat,{minWidth:140}]}><Label>AGENTES</Label><Text style={s.statValue}>{active.toString().padStart(2,'0')}<Text style={{fontSize:16,color:C.muted}}> / {account.agents.length.toString().padStart(2,'0')}</Text></Text><Text style={{color:C.green,fontSize:12}}>Habilitados para simular</Text></View><View style={[s.stat,{minWidth:140}]}><Label>ATIVIDADE</Label><Text style={s.statValue}>{account.trades.length.toString().padStart(2,'0')}</Text><Label>Entradas simuladas</Label></View></View><View style={s.ecosystem}><Text style={{color:C.muted,fontSize:10,letterSpacing:1}}>ECOSSISTEMA DEMO</Text>{['SOLANA','Jupiter','pump.fun','Meteora','Hyperliquid'].map(v=><Text key={v} style={{color:'#c4ced8',fontSize:12,fontWeight:'600'}}>{v}</Text>)}</View></>}
-    {(tab==='Visão geral'||tab==='Mercados')&&<View style={{flexDirection:wide?'row':'column',gap:22,alignItems:'stretch'}}><View style={{flex:1,gap:22}}>{marketList}{tab==='Visão geral'&&positions}</View><View style={{width:wide?340:'100%',gap:22}}>{ticket}<View style={[s.card,{padding:20,gap:12}]}><Text style={s.h2}>Dados, sem ruído.</Text><Label>{quoteStatus}{quoteTime?` · ${quoteTime}`:''}</Label><Button title={refreshing?'Atualizando…':'Atualizar cotações públicas'} disabled={refreshing} onPress={refresh}/><Label style={{fontSize:11,lineHeight:18}}>Snapshot de BTC, ETH e SOL via Hyperliquid; SOL spot via DexScreener. Outras cotações, variações e gráficos são demonstrativos.</Label></View></View></View>}
-    {tab==='Agentes'&&<><View style={s.notice}><Text style={[s.label,{lineHeight:20}]}>Os agentes desta versão são regras locais, não modelos de IA. Cada clique executa no máximo uma ordem paper no mercado selecionado: {selected.symbol} / {selected.venue}.</Text></View>{agents}<View style={[s.card,{padding:22,gap:16}]}><Text style={s.h2}>Copiloto / comandos</Text><Label style={{lineHeight:22}}>{reply}</Label><View style={[s.row,{flexWrap:'wrap'}]}><TextInput accessibilityLabel="Comando do copiloto" placeholder="Digite status, risco ou sol" placeholderTextColor={C.muted} value={command} onChangeText={setCommand} onSubmitEditing={sendCommand} style={[s.input,{flex:1,minWidth:150}]}/><Button title="Consultar" onPress={sendCommand}/></View></View></>}
-    {tab==='Portfólio'&&<><View style={[s.card,{padding:24,gap:12}]}><Label>PATRIMÔNIO PAPER</Label><Text style={s.statValue}>{money(equity)}</Text><Label>Caixa disponível {money(account.cash)} · PnL marcado pelas cotações atuais desta sessão.</Label></View>{positions}<View style={s.card}><View style={s.sectionHeader}><Text style={s.h2}>Registro de entradas</Text><Label>{account.trades.length} operações</Label></View>{account.trades.length===0?<Label style={{padding:22}}>Suas operações simuladas aparecerão aqui.</Label>:account.trades.slice().reverse().map(t=><View style={s.marketRow} key={t.id}><View style={{flex:1}}><Text style={s.strong}>{markets.find(m=>m.id===t.marketId)?.symbol} · {t.side.toUpperCase()}</Text><Label>{t.agentId?'Agente determinístico':'Ordem manual'} · {t.id}</Label></View><Text style={s.text}>{money(t.notional)}</Text></View>)}</View><Label>Dados salvos apenas neste navegador/dispositivo. Sem sincronização, taxas, funding, slippage ou liquidação em tempo real.</Label></>}
-    {tab==='Conexões'&&<View style={s.card}><View style={s.sectionHeader}><Text style={s.h2}>Cobertura & integrações</Text><Badge text="TRANSPARÊNCIA"/></View>{[{name:'Solana / Jupiter / Raydium / Meteora / Pump.fun',state:'SIMULAÇÃO',body:'Ativos demonstrativos. Não há conexão RPC, roteador de swaps ou execução nestes protocolos.'},{name:'Hyperliquid',state:'LEITURA PÚBLICA',body:'Adapter opcional de preços BTC, ETH e SOL. Long/Short são simulados localmente, sem ordens na exchange.'},{name:'DexScreener / Solana',state:'LEITURA PÚBLICA',body:'Consulta opcional de preço SOL pelo par válido de maior liquidez. Não é indexação completa da rede.'},{name:'GMGN / cobertura multichain',state:'NÃO INTEGRADO',body:'Sem API ou paridade de cobertura GMGN. A lista demonstrativa não significa suporte a todas as redes ou pools.'},{name:'Carteiras / IA / execução real',state:'NÃO INTEGRADO',body:'Sem custódia, seed phrase, chaves privadas, LLM, servidor de agentes, assinatura ou envio de transações.'}].map(x=><View style={{padding:22,borderTopWidth:1,borderTopColor:C.line,gap:12}} key={x.name}><Text style={s.h2}>{x.name}</Text><Badge text={x.state} color={C.muted}/><Label style={{lineHeight:21}}>{x.body}</Label></View>)}</View>}
-    <View style={[s.row,{justifyContent:'space-between',flexWrap:'wrap',gap:10,paddingTop:8}]}><Label style={{fontSize:10,letterSpacing:1}}>ORBIT · BUILT FOR AGENTIC MARKETS</Label><Label style={{fontSize:10}}>Ambiente experimental. Não é recomendação financeira.</Label></View>
-    </View></ScrollView>{!desktop&&<View style={s.bottomNav}>{tabs.map(t=><Pressable accessibilityRole="button" accessibilityLabel={t.name} onPress={()=>setTab(t.name)} style={{alignItems:'center',flex:1,gap:4,paddingVertical:12}} key={t.name}><Text style={{fontSize:21,color:tab===t.name?C.lime:C.muted}}>{t.icon}</Text><Text style={{fontSize:9,color:tab===t.name?C.lime:C.muted}}>{t.name}</Text></Pressable>)}</View>}</View></View>;
+  const { width } = useWindowDimensions();
+  const [page, setPage] = useState<Page>("portfolio");
+  const [account, setAccount] = useState<Account>(createAccount);
+  const [loaded, setLoaded] = useState(false);
+  const [markets, setMarkets] = useState(initialMarkets);
+  const [detail, setDetail] = useState<Market | null>(null);
+  const [ticket, setTicket] = useState<"long" | "short" | null>(null);
+  const [amount, setAmount] = useState("100");
+  const [leverage, setLeverage] = useState(1);
+  const [review, setReview] = useState(false);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("Todos");
+  const [notice, setNotice] = useState("");
+  const [hidden, setHidden] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [quoteStatus, setQuoteStatus] = useState("Preços demonstrativos");
+  const [command, setCommand] = useState("");
+  const [reply, setReply] = useState(
+    "Consulte status, risco ou sol. Comandos locais; nenhum modelo de IA conectado.",
+  );
+  useEffect(() => {
+    AsyncStorage.getItem(KEY)
+      .then((raw) => {
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (
+          saved.version !== 1 ||
+          !Number.isFinite(saved.account?.cash) ||
+          saved.account.cash < 0 ||
+          !Array.isArray(saved.account.positions) ||
+          !Array.isArray(saved.account.trades) ||
+          !Array.isArray(saved.account.agents) ||
+          typeof saved.account.killed !== "boolean"
+        )
+          throw Error("Invalid saved account");
+        accountEquity(saved.account, initialMarkets);
+        setAccount(saved.account);
+      })
+      .catch(() =>
+        setNotice("Sessão local inválida. Uma nova conta demo foi criada."),
+      )
+      .finally(() => setLoaded(true));
+  }, []);
+  useEffect(() => {
+    if (loaded) {
+      const snapshot = JSON.stringify({ version: 1, account });
+      saves = saves
+        .then(() => AsyncStorage.setItem(KEY, snapshot))
+        .catch(() => setNotice("Não foi possível salvar neste dispositivo."));
+    }
+  }, [loaded, account]);
+  const act = (fn: () => Account, message: string) => {
+    try {
+      setAccount(fn());
+      setNotice(message);
+      return true;
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "Não foi possível concluir.");
+      return false;
+    }
+  };
+  const open = (m: Market) => {
+    setDetail(m);
+    setLeverage(1);
+    setReview(false);
+  };
+  const go = (p: Page) => {
+    setPage(p);
+    setDetail(null);
+  };
+  const equity = accountEquity(account, markets);
+  const active = account.agents.filter((a) => a.active).length;
+  const perps = markets.filter((m) => m.kind === "perp");
+  const spot = markets.filter((m) => m.kind === "spot");
+  const refresh = async () => {
+    setBusy(true);
+    try {
+      const result = await fetchPublicQuotes();
+      setMarkets((old) =>
+        old.map((m) => {
+          const q = result.quotes.find(
+            (q) =>
+              q.symbol === m.symbol &&
+              q.venue === (m.kind === "perp" ? "Hyperliquid" : "Solana"),
+          );
+          return q ? { ...m, price: q.price } : m;
+        }),
+      );
+      setQuoteStatus(
+        result.quotes.length
+          ? `Snapshot público · ${new Date().toLocaleTimeString("pt-BR")}`
+          : "Atualização indisponível",
+      );
+      setNotice(
+        result.errors.join(" | ") ||
+          "Cotações atualizadas. Gráficos e métricas continuam ilustrativos.",
+      );
+    } catch {
+      setNotice("Sem conexão. Cotações anteriores preservadas.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const chooseTicket = (side: "long" | "short") => {
+    setTicket(side);
+    setAmount("100");
+    setReview(false);
+  };
+  const confirm = () => {
+    if (!detail || !ticket) return;
+    if (
+      act(
+        () => executeOrder(account, detail, ticket, Number(amount), leverage),
+        "Operação simulada. Nenhuma transação enviada.",
+      )
+    ) {
+      setTicket(null);
+      setReview(false);
+    }
+  };
+  const keypad = (key: string) => {
+    if (key === "⌫") {
+      setAmount((a) => a.slice(0, -1));
+      return;
+    }
+    setAmount((a) => {
+      if (key === "." && a.includes(".")) return a;
+      if (a.length >= 12) return a;
+      return a === "0" && key !== "." ? key : a + key;
+    });
+  };
+  const selected = detail ? markets.find((m) => m.id === detail.id)! : null;
+  const tokenRows = (items: Market[]) =>
+    items.map((m) => (
+      <Tap
+        key={m.id}
+        label={`Abrir ${m.symbol} ${m.venue}`}
+        onPress={() => open(m)}
+        style={s.tokenRow}
+      >
+        <Token m={m} />
+        <View style={{ flex: 1, gap: 5 }}>
+          <Text style={s.tokenName}>
+            {m.name} <Text style={s.symbol}>{m.symbol}</Text>
+          </Text>
+          <Muted style={{ fontSize: 11 }}>
+            {m.venue}
+            {m.kind === "perp" ? " · Perp" : ""}
+          </Muted>
+        </View>
+        <View style={{ alignItems: "flex-end", gap: 5 }}>
+          <Text style={s.tokenPrice}>{price(m.price)}</Text>
+          <Text
+            style={{ fontSize: 11, color: m.change >= 0 ? c.green : c.red }}
+          >
+            {m.change >= 0 ? "↗" : "↘"} {Math.abs(m.change).toFixed(2)}%{" "}
+            <Text style={{ color: c.muted, fontSize: 9 }}>demo</Text>
+          </Text>
+        </View>
+      </Tap>
+    ));
+  const positions = (
+    <>
+      {account.positions.length === 0 ? (
+        <View style={s.empty}>
+          <Icon name="wallet" size={32} color={c.muted} />
+          <Text style={s.h3}>Nenhuma posição aberta</Text>
+          <Muted style={{ textAlign: "center", lineHeight: 20 }}>
+            Encontre um ativo e experimente sua primeira operação simulada.
+          </Muted>
+          <Tap
+            label="Explorar mercados"
+            onPress={() => go("market")}
+            style={s.smallAction}
+          >
+            <Text style={s.smallActionText}>Explorar mercados</Text>
+            <Icon name="arrow" size={17} color={c.lime} />
+          </Tap>
+        </View>
+      ) : (
+        account.positions.map((p) => {
+          const m = markets.find((m) => m.id === p.marketId)!;
+          const pnl =
+            (m.price - p.entry) * p.quantity * (p.side === "long" ? 1 : -1);
+          return (
+            <View style={s.position} key={p.id}>
+              <View style={s.row}>
+                <Token m={m} size={32} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.tokenName}>
+                    {m.symbol}{" "}
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: p.side === "long" ? c.green : c.red,
+                      }}
+                    >
+                      {p.side.toUpperCase()} {p.leverage}×
+                    </Text>
+                  </Text>
+                  <Muted style={{ fontSize: 11, marginTop: 5 }}>
+                    Margem {money(p.margin)}
+                  </Muted>
+                </View>
+                <Text
+                  style={{ color: pnl >= 0 ? c.green : c.red, fontSize: 14 }}
+                >
+                  {money(Math.max(-p.margin, pnl))}
+                </Text>
+              </View>
+              <Tap
+                label={`Encerrar ${m.symbol} ${p.id}`}
+                onPress={() =>
+                  act(
+                    () => closePosition(account, p.id, m),
+                    "Posição encerrada no simulador.",
+                  )
+                }
+                style={s.closePosition}
+              >
+                <Text style={{ fontSize: 12, color: c.ink }}>
+                  Encerrar posição
+                </Text>
+              </Tap>
+            </View>
+          );
+        })
+      )}
+    </>
+  );
+  const nav: { id: Page; label: string; icon: Glyph }[] = [
+    { id: "portfolio", label: "Portfólio", icon: "wallet" },
+    { id: "market", label: "Mercado", icon: "market" },
+    { id: "agents", label: "Agentes", icon: "agents" },
+    { id: "orders", label: "Ordens", icon: "orders" },
+    { id: "settings", label: "Ajustes", icon: "sliders" },
+  ];
+  if (!loaded)
+    return (
+      <View
+        style={[s.stage, { justifyContent: "center", alignItems: "center" }]}
+      >
+        <ActivityIndicator color={c.lime} />
+      </View>
+    );
+  return (
+    <View style={s.stage}>
+      <StatusBar style="light" />
+      <View style={[s.phone, width > 520 && s.desktopPhone]}>
+        <View style={s.topbar}>
+          {selected ? (
+            <>
+              <Tap
+                label="Voltar"
+                onPress={() => setDetail(null)}
+                style={s.iconButton}
+              >
+                <Icon name="back" />
+              </Tap>
+              <View style={[s.row, { flex: 1, justifyContent: "center" }]}>
+                <Token m={selected} size={27} />
+                <Text style={s.h3}>{selected.symbol}</Text>
+                {selected.kind === "perp" && <Pill text="PERP" />}
+              </View>
+              <Tap
+                label="Buscar mercados"
+                onPress={() => go("market")}
+                style={s.iconButton}
+              >
+                <Icon name="search" />
+              </Tap>
+            </>
+          ) : (
+            <>
+              <Tap
+                label="Ajustes da conta"
+                onPress={() => go("settings")}
+                style={s.walletButton}
+              >
+                <View style={s.avatar}>
+                  <Text
+                    style={{ color: c.lime, fontWeight: "600", fontSize: 11 }}
+                  >
+                    JR
+                  </Text>
+                </View>
+                <Text style={{ color: c.ink, fontSize: 13, fontWeight: "600" }}>
+                  Conta principal
+                </Text>
+                <Icon name="chevron" size={13} color={c.muted} />
+              </Tap>
+              <View style={{ flex: 1 }} />
+              <Pill text="DEMO" bright />
+              <Tap
+                label="Buscar mercados"
+                onPress={() => go("market")}
+                style={s.iconButton}
+              >
+                <Icon name="search" size={23} />
+              </Tap>
+            </>
+          )}
+        </View>
+        {account.killed && (
+          <Tap
+            label="Retomar simulação"
+            onPress={() =>
+              act(() => setKillSwitch(account, false), "Simulação retomada.")
+            }
+            style={s.killBanner}
+          >
+            <Icon name="shield" size={15} color={c.red} />
+            <Text style={{ color: c.red, fontSize: 11, flex: 1 }}>
+              Entradas pausadas · toque para retomar
+            </Text>
+            <Icon name="chevron" size={14} color={c.red} />
+          </Tap>
+        )}
+        {!!notice && (
+          <Tap
+            label="Dispensar aviso"
+            onPress={() => setNotice("")}
+            style={s.toast}
+          >
+            <Text
+              accessibilityLiveRegion="polite"
+              style={{ color: c.ink, fontSize: 11, lineHeight: 17, flex: 1 }}
+            >
+              {notice}
+            </Text>
+            <Icon name="close" size={15} color={c.muted} />
+          </Tap>
+        )}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {selected ? (
+            <>
+              <View style={{ paddingTop: 12 }}>
+                <Text style={s.detailPrice}>{price(selected.price)}</Text>
+                <Text
+                  style={{
+                    color: selected.change >= 0 ? c.green : c.red,
+                    fontSize: 17,
+                    marginTop: 8,
+                  }}
+                >
+                  {selected.change >= 0 ? "↗" : "↘"}{" "}
+                  {Math.abs(selected.change).toFixed(2)}%{" "}
+                  <Text style={{ color: c.muted, fontSize: 11 }}>
+                    ilustrativo
+                  </Text>
+                </Text>
+              </View>
+              <Candles m={selected} />
+              <View style={s.chartCaption}>
+                <Pill text="GRÁFICO DEMONSTRATIVO" />
+                <Muted style={{ fontSize: 10 }}>Sem feed ao vivo</Muted>
+              </View>
+              <View style={s.section}>
+                <Text style={s.h2}>Estatísticas de mercado</Text>
+                <Icon name="sliders" size={17} color={c.muted} />
+              </View>
+              <View style={s.statGrid}>
+                {[
+                  { label: "Volume 24h · demo", value: money(selected.volume) },
+                  {
+                    label: "Liquidez · demo",
+                    value: money(selected.liquidity),
+                  },
+                  { label: "Protocolo", value: selected.venue },
+                  { label: "Execução", value: "Simulada" },
+                ].map((x) => (
+                  <View key={x.label} style={s.statTile}>
+                    <Muted style={{ fontSize: 12 }}>{x.label}</Muted>
+                    <Text
+                      style={{
+                        color: c.ink,
+                        fontSize: 17,
+                        fontWeight: "600",
+                        marginTop: 12,
+                      }}
+                    >
+                      {x.value}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+              <View style={s.section}>
+                <Text style={s.h2}>Sobre o mercado</Text>
+              </View>
+              <Muted style={{ lineHeight: 21 }}>
+                Mercado{" "}
+                {selected.kind === "perp"
+                  ? "perpétuo com margem isolada simulada"
+                  : "spot demonstrativo"}
+                . {selected.venue} não está conectado para execução. Não há
+                carteira, assinatura, funding ou liquidação contínua.
+              </Muted>
+              <View style={{ marginTop: 24 }}>
+                <Muted style={{ fontSize: 10 }}>
+                  {quoteStatus}. Variações e estatísticas são demo.
+                </Muted>
+              </View>
+            </>
+          ) : page === "portfolio" ? (
+            <>
+              <View style={s.balanceCard}>
+                <View style={[s.row, { justifyContent: "space-between" }]}>
+                  <Text style={s.darkLabel}>SALDO SIMULADO</Text>
+                  <Tap
+                    label={hidden ? "Mostrar saldo" : "Ocultar saldo"}
+                    onPress={() => setHidden(!hidden)}
+                  >
+                    <Icon name="eye" color="#424b23" size={19} />
+                  </Tap>
+                </View>
+                <Text style={s.balanceValue}>
+                  {hidden ? "••••••" : money(equity)}
+                </Text>
+                <View style={s.row}>
+                  <Text style={{ color: "#434d28", fontSize: 12 }}>
+                    Disponível {hidden ? "••••" : money(account.cash)}
+                  </Text>
+                </View>
+                <View style={s.balanceBottom}>
+                  <View style={[s.row, { gap: 6 }]}>
+                    <View
+                      style={{
+                        width: 5,
+                        height: 5,
+                        borderRadius: 3,
+                        backgroundColor: "#394322",
+                      }}
+                    />
+                    <Text
+                      style={{
+                        color: "#394322",
+                        fontSize: 10,
+                        fontWeight: "600",
+                      }}
+                    >
+                      PAPER WALLET
+                    </Text>
+                  </View>
+                  <Text style={{ color: "#65703a", fontSize: 11 }}>USD</Text>
+                </View>
+                <View pointerEvents="none" style={s.orbital}>
+                  <Svg width={145} height={145} viewBox="0 0 145 145">
+                    {[35, 44, 53, 62, 71].map((r, i) => (
+                      <Circle
+                        key={r}
+                        cx={73}
+                        cy={73}
+                        r={r}
+                        stroke="#65743a"
+                        strokeWidth={0.55}
+                        fill="none"
+                        opacity={0.15 + i * 0.06}
+                      />
+                    ))}
+                    <Path
+                      d="m35 90 44-57 25 45-41 34z"
+                      fill="#637237"
+                      opacity={0.16}
+                    />
+                  </Svg>
+                </View>
+              </View>
+              <View style={s.quickActions}>
+                {[
+                  {
+                    label: "Operar",
+                    icon: "swap" as Glyph,
+                    target: "market" as Page,
+                  },
+                  {
+                    label: "Agentes",
+                    icon: "agents" as Glyph,
+                    target: "agents" as Page,
+                  },
+                  {
+                    label: "Posições",
+                    icon: "wallet" as Glyph,
+                    target: "orders" as Page,
+                  },
+                  {
+                    label: "Histórico",
+                    icon: "orders" as Glyph,
+                    target: "orders" as Page,
+                  },
+                ].map((x) => (
+                  <Tap
+                    label={x.label}
+                    key={x.label}
+                    onPress={() => go(x.target)}
+                    style={s.quickAction}
+                  >
+                    <View style={s.quickCircle}>
+                      <Icon name={x.icon} size={21} />
+                    </View>
+                    <Text style={{ color: c.ink, fontSize: 11, marginTop: 9 }}>
+                      {x.label}
+                    </Text>
+                  </Tap>
+                ))}
+              </View>
+              <Tap
+                label="Abrir controle de agentes"
+                onPress={() => go("agents")}
+                style={s.agentBanner}
+              >
+                <View style={s.agentMark}>
+                  <Icon name="agents" color={c.lime} size={23} />
+                </View>
+                <View style={{ flex: 1, gap: 5 }}>
+                  <Text
+                    style={{ color: c.ink, fontSize: 13, fontWeight: "600" }}
+                  >
+                    Seu próximo movimento, com agentes.
+                  </Text>
+                  <Muted style={{ fontSize: 10 }}>
+                    {active} habilitado{active !== 1 ? "s" : ""} · regras locais
+                    · sem IA conectada
+                  </Muted>
+                </View>
+                <Icon name="chevron" size={15} color={c.muted} />
+              </Tap>
+              <View style={s.section}>
+                <View style={s.row}>
+                  <Text style={s.h2}>Perps</Text>
+                  <Icon name="chevron" size={15} />
+                </View>
+                <Tap
+                  label="Ver perps"
+                  onPress={() => {
+                    go("market");
+                    setFilter("Perps");
+                  }}
+                >
+                  <Muted style={{ fontSize: 11 }}>Ver todos</Muted>
+                </Tap>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 12, paddingBottom: 4 }}
+              >
+                {perps.map((m) => (
+                  <Tap
+                    key={m.id}
+                    label={`Abrir ${m.symbol} ${m.venue}`}
+                    onPress={() => open(m)}
+                    style={s.perpCard}
+                  >
+                    <View style={[s.row, { justifyContent: "space-between" }]}>
+                      <Token m={m} size={32} />
+                      <Pill text="ATÉ 10×" />
+                    </View>
+                    <Text
+                      style={{
+                        color: c.ink,
+                        fontSize: 21,
+                        fontWeight: "600",
+                        marginTop: 20,
+                      }}
+                    >
+                      {m.symbol}
+                    </Text>
+                    <Text
+                      style={{ color: c.muted, fontSize: 12, marginTop: 5 }}
+                    >
+                      {price(m.price)}
+                    </Text>
+                    <Text
+                      style={{
+                        color: m.change >= 0 ? c.green : c.red,
+                        fontSize: 11,
+                        marginTop: 10,
+                      }}
+                    >
+                      {m.change >= 0 ? "↗" : "↘"} {Math.abs(m.change)}% demo
+                    </Text>
+                  </Tap>
+                ))}
+              </ScrollView>
+              <View style={s.section}>
+                <Text style={s.h2}>No radar</Text>
+                <Pill text="SOLANA · DEMO" />
+              </View>
+              {tokenRows(spot.slice(1, 4))}
+              {account.positions.length > 0 && (
+                <>
+                  <View style={s.section}>
+                    <Text style={s.h2}>Suas posições</Text>
+                    <Pill text={`${account.positions.length} abertas`} />
+                  </View>
+                  {positions}
+                </>
+              )}
+              <Muted style={s.disclaimer}>
+                Capital fictício. Sem movimentação de fundos reais.
+              </Muted>
+            </>
+          ) : page === "market" ? (
+            <>
+              <Text style={s.pageTitle}>Mercado</Text>
+              <View style={s.searchBox}>
+                <Icon name="search" size={18} color={c.muted} />
+                <TextInput
+                  accessibilityLabel="Buscar token ou protocolo"
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="Pesquisar token ou protocolo"
+                  placeholderTextColor={c.muted}
+                  style={s.searchInput}
+                />
+              </View>
+              <View style={s.filters}>
+                {["Todos", "Memecoins", "Spot", "Perps"].map((f) => (
+                  <Tap
+                    key={f}
+                    label={`Filtrar ${f}`}
+                    onPress={() => setFilter(f)}
+                    style={[s.filter, filter === f && s.filterActive]}
+                  >
+                    <Text
+                      style={{
+                        color: filter === f ? c.lime : c.muted,
+                        fontSize: 12,
+                      }}
+                    >
+                      {f}
+                    </Text>
+                  </Tap>
+                ))}
+              </View>
+              <View
+                style={[
+                  s.row,
+                  { justifyContent: "space-between", paddingVertical: 15 },
+                ]}
+              >
+                <Muted style={{ fontSize: 10, letterSpacing: 0.5 }}>
+                  ATIVO / PROTOCOLO
+                </Muted>
+                <Muted style={{ fontSize: 10, letterSpacing: 0.5 }}>
+                  PREÇO / 24H DEMO
+                </Muted>
+              </View>
+              {tokenRows(
+                markets.filter(
+                  (m) =>
+                    (filter === "Todos" ||
+                      (filter === "Memecoins"
+                        ? m.kind === "spot" && m.symbol !== "SOL"
+                        : filter === "Perps"
+                          ? m.kind === "perp"
+                          : m.kind === "spot")) &&
+                    `${m.name} ${m.symbol} ${m.venue}`
+                      .toLowerCase()
+                      .includes(query.toLowerCase()),
+                ),
+              )}
+              <View style={s.dataPanel}>
+                <View style={s.row}>
+                  <View style={{ flex: 1, gap: 5 }}>
+                    <Text style={s.h3}>Cotações públicas</Text>
+                    <Muted style={{ fontSize: 11 }}>{quoteStatus}</Muted>
+                  </View>
+                  <Tap
+                    label="Atualizar cotações públicas"
+                    onPress={refresh}
+                    disabled={busy}
+                    style={s.refresh}
+                  >
+                    <Text style={{ color: c.lime, fontSize: 12 }}>
+                      {busy ? "Lendo…" : "Atualizar"}
+                    </Text>
+                  </Tap>
+                </View>
+                <Muted style={{ fontSize: 11, lineHeight: 18, marginTop: 14 }}>
+                  BTC, ETH e SOL via Hyperliquid; SOL spot via DexScreener.
+                  Demais ativos, gráficos e métricas são demonstrativos.
+                </Muted>
+              </View>
+            </>
+          ) : page === "agents" ? (
+            <>
+              <View
+                style={[
+                  s.row,
+                  { justifyContent: "space-between", marginTop: 10 },
+                ]}
+              >
+                <Text style={s.pageTitle}>Agentes</Text>
+                <Pill
+                  text={`${active} HABILITADO${active !== 1 ? "S" : ""}`}
+                  bright
+                />
+              </View>
+              <Muted style={{ lineHeight: 21, marginBottom: 22 }}>
+                Você define o ritmo. Uma ordem simulada por toque, com limites
+                de risco.
+              </Muted>
+              {account.agents.map((a, i) => (
+                <View key={a.id} style={s.agentCard}>
+                  <View style={s.row}>
+                    <View
+                      style={[
+                        s.agentMark,
+                        {
+                          backgroundColor: ["#282d20", "#272436", "#202c32"][i],
+                        },
+                      ]}
+                    >
+                      <Icon
+                        name="agents"
+                        color={["#d8ef80", "#b7a1e7", "#85c5cf"][i]}
+                        size={25}
+                      />
+                    </View>
+                    <View style={{ flex: 1, gap: 5 }}>
+                      <Text style={s.h3}>{a.name}</Text>
+                      <Muted style={{ fontSize: 11 }}>{a.strategy}</Muted>
+                    </View>
+                    <Tap
+                      label={a.active ? `Pausar ${a.name}` : `Ativar ${a.name}`}
+                      onPress={() =>
+                        act(
+                          () => setAgentActive(account, a.id, !a.active),
+                          a.active ? "Agente pausado." : "Agente habilitado.",
+                        )
+                      }
+                      style={[
+                        s.toggle,
+                        a.active && { backgroundColor: c.lime },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          s.toggleKnob,
+                          a.active && {
+                            alignSelf: "flex-end",
+                            backgroundColor: "#27311c",
+                          },
+                        ]}
+                      />
+                    </Tap>
+                  </View>
+                  <View style={{ marginTop: 23, gap: 9 }}>
+                    <View style={[s.row, { justifyContent: "space-between" }]}>
+                      <Muted style={{ fontSize: 11 }}>
+                        Orçamento utilizado
+                      </Muted>
+                      <Text style={{ fontSize: 11, color: c.ink }}>
+                        {money(a.spent)}{" "}
+                        <Text style={{ color: c.muted }}>
+                          / {money(a.budget)}
+                        </Text>
+                      </Text>
+                    </View>
+                    <View style={s.progress}>
+                      <View
+                        style={{
+                          height: 3,
+                          width: `${Math.min(100, (a.spent / a.budget) * 100)}%`,
+                          backgroundColor: c.lime,
+                          borderRadius: 2,
+                        }}
+                      />
+                    </View>
+                    <Muted style={{ fontSize: 10 }}>
+                      Teto {money(a.maxOrder)} por ordem · até {a.maxLeverage}×
+                    </Muted>
+                  </View>
+                  <Tap
+                    label={`Simular ${a.name}`}
+                    disabled={!a.active || account.killed}
+                    onPress={() =>
+                      act(
+                        () => runAgent(account, a.id, perps[0]),
+                        `${a.name}: uma operação simulada em BTC.`,
+                      )
+                    }
+                    style={s.agentRun}
+                  >
+                    <Icon name="play" size={13} color={c.lime} />
+                    <Text
+                      style={{ color: c.lime, fontSize: 12, fontWeight: "600" }}
+                    >
+                      Simular uma operação · BTC
+                    </Text>
+                  </Tap>
+                </View>
+              ))}
+              <Tap
+                label={
+                  account.killed
+                    ? "Retomar entradas demo"
+                    : "Parar todas as entradas"
+                }
+                onPress={() =>
+                  act(
+                    () => setKillSwitch(account, !account.killed),
+                    account.killed
+                      ? "Entradas liberadas."
+                      : "Emergência ativada. Encerramentos continuam disponíveis.",
+                  )
+                }
+                style={s.emergency}
+              >
+                <Icon name="shield" size={18} color={c.red} />
+                <Text style={{ color: c.red, fontSize: 12, fontWeight: "600" }}>
+                  {account.killed
+                    ? "Retomar entradas demo"
+                    : "Parar todas as entradas"}
+                </Text>
+              </Tap>
+              <View style={s.section}>
+                <Text style={s.h2}>Copiloto</Text>
+                <Pill text="COMANDOS LOCAIS" />
+              </View>
+              <Muted style={{ lineHeight: 21 }}>{reply}</Muted>
+              <View style={[s.searchBox, { marginTop: 16 }]}>
+                <TextInput
+                  accessibilityLabel="Comando do copiloto"
+                  value={command}
+                  onChangeText={setCommand}
+                  placeholder="status, risco ou sol"
+                  placeholderTextColor={c.muted}
+                  style={s.searchInput}
+                />
+                <Tap
+                  label="Consultar copiloto"
+                  onPress={() => {
+                    const q = command.trim().toLowerCase();
+                    setReply(
+                      q === "status"
+                        ? `${active} agentes habilitados, ${account.positions.length} posições e ${money(account.cash)} disponíveis. Execução ${account.killed ? "pausada" : "simulada"}.`
+                        : q === "risco"
+                          ? "Margem limitada ao saldo; orçamento e teto por agente; perps até 10×. Emergência bloqueia entradas, não encerramentos."
+                          : q === "sol"
+                            ? "SOL spot e perp disponíveis para simulação. Sem RPC ou roteamento on-chain."
+                            : "Use status, risco ou sol. Este copiloto não é um LLM.",
+                    );
+                    setCommand("");
+                  }}
+                >
+                  <Icon name="arrow" color={c.lime} />
+                </Tap>
+              </View>
+              <Muted style={s.disclaimer}>
+                Estratégias determinísticas. Não são agentes de IA autônomos.
+              </Muted>
+            </>
+          ) : page === "orders" ? (
+            <>
+              <Text style={s.pageTitle}>Suas operações</Text>
+              <View
+                style={[
+                  s.row,
+                  {
+                    justifyContent: "space-between",
+                    marginTop: 3,
+                    marginBottom: 20,
+                  },
+                ]}
+              >
+                <Muted>Patrimônio paper</Muted>
+                <Text style={{ fontSize: 17, color: c.ink }}>
+                  {money(equity)}
+                </Text>
+              </View>
+              <View style={s.section}>
+                <Text style={s.h2}>Posições abertas</Text>
+                <Pill text={`${account.positions.length}`} />
+              </View>
+              {positions}
+              <View style={s.section}>
+                <Text style={s.h2}>Histórico</Text>
+                <Muted style={{ fontSize: 11 }}>
+                  {account.trades.length} operações
+                </Muted>
+              </View>
+              {account.trades.length === 0 ? (
+                <Muted style={{ paddingVertical: 20 }}>
+                  Nenhuma operação registrada.
+                </Muted>
+              ) : (
+                account.trades
+                  .slice()
+                  .reverse()
+                  .map((t) => {
+                    const m = markets.find((m) => m.id === t.marketId)!;
+                    return (
+                      <View key={t.id} style={s.historyRow}>
+                        <View
+                          style={[
+                            s.historyIcon,
+                            {
+                              backgroundColor:
+                                t.action === "close" ? "#2b2525" : "#252d20",
+                            },
+                          ]}
+                        >
+                          <Icon
+                            name={t.action === "close" ? "check" : "swap"}
+                            size={17}
+                            color={t.action === "close" ? c.muted : c.lime}
+                          />
+                        </View>
+                        <View style={{ flex: 1, gap: 5 }}>
+                          <Text style={s.tokenName}>
+                            {t.action === "open"
+                              ? "Abertura"
+                              : t.action === "close"
+                                ? "Encerramento"
+                                : "Operação"}{" "}
+                            · {m.symbol}
+                          </Text>
+                          <Muted style={{ fontSize: 10 }}>
+                            {t.agentId ? "Agente" : "Manual"} ·{" "}
+                            {t.side.toUpperCase()} · {t.id}
+                          </Muted>
+                        </View>
+                        <Text style={{ color: c.ink, fontSize: 13 }}>
+                          {money(t.notional)}
+                        </Text>
+                      </View>
+                    );
+                  })
+              )}
+              <Muted style={s.disclaimer}>
+                Registro local neste dispositivo. Sem taxas, slippage ou
+                funding.
+              </Muted>
+            </>
+          ) : (
+            <>
+              <Text style={s.pageTitle}>Seu workspace</Text>
+              <WalletPanel />
+              <LiveTradingPanel />
+              <View style={s.profileCard}>
+                <View
+                  style={[
+                    s.avatar,
+                    { width: 46, height: 46, borderRadius: 23 },
+                  ]}
+                >
+                  <Text style={{ color: c.lime, fontSize: 16 }}>JR</Text>
+                </View>
+                <View style={{ flex: 1, gap: 5 }}>
+                  <Text style={s.h3}>Conta principal</Text>
+                  <Muted style={{ fontSize: 11 }}>
+                    Paper wallet · armazenamento local
+                  </Muted>
+                </View>
+                <Pill text="DEMO" bright />
+              </View>
+              <View style={s.section}>
+                <Text style={s.h2}>Conexões & cobertura</Text>
+              </View>
+              {[
+                {
+                  name: "Hyperliquid",
+                  tag: "Leitura de preços",
+                  body: "Snapshot público opcional de BTC, ETH e SOL. Não envia ordens.",
+                },
+                {
+                  name: "Solana / DexScreener",
+                  tag: "Leitura de preços",
+                  body: "Preço SOL pelo par válido de maior liquidez. Não é indexação de toda a rede.",
+                },
+                {
+                  name: "Jupiter · Raydium · Meteora · Pump.fun",
+                  tag: "Somente demonstração",
+                  body: "Sem swaps, RPC, roteamento ou assinatura. As referências de protocolo não indicam integração real.",
+                },
+                {
+                  name: "GMGN / multichain",
+                  tag: "Não integrado",
+                  body: "Sem paridade de cobertura com a GMGN. Não oferece todos os tokens, pools ou redes.",
+                },
+                {
+                  name: "Carteira & IA",
+                  tag: "Não conectado",
+                  body: "Sem chaves privadas, custódia, LLM ou agentes autônomos.",
+                },
+              ].map((x) => (
+                <View style={s.connection} key={x.name}>
+                  <Text style={s.h3}>{x.name}</Text>
+                  <Text
+                    style={{
+                      color: c.lime,
+                      fontSize: 10,
+                      marginTop: 7,
+                      marginBottom: 11,
+                    }}
+                  >
+                    {x.tag}
+                  </Text>
+                  <Muted style={{ lineHeight: 19, fontSize: 12 }}>
+                    {x.body}
+                  </Muted>
+                </View>
+              ))}
+              <Muted style={s.disclaimer}>
+                ORBIT / 0.1 · EXPERIMENTAL{"\n"}Uma base de simulação, não uma
+                plataforma de execução real.
+              </Muted>
+            </>
+          )}
+        </ScrollView>
+        {selected ? (
+          <View style={s.tradeBar}>
+            <Tap
+              label={
+                selected.kind === "spot" ? "Comprar · demo" : "Long · demo"
+              }
+              disabled={account.killed}
+              onPress={() => chooseTicket("long")}
+              style={[s.primary, { flex: 1 }]}
+            >
+              <Text style={s.primaryText}>
+                {selected.kind === "spot" ? "Comprar" : "↑ Long"}
+              </Text>
+            </Tap>
+            {selected.kind === "perp" && (
+              <Tap
+                label="Short · demo"
+                disabled={account.killed}
+                onPress={() => chooseTicket("short")}
+                style={[s.primary, { backgroundColor: c.red, flex: 1 }]}
+              >
+                <Text style={s.primaryText}>↓ Short</Text>
+              </Tap>
+            )}
+          </View>
+        ) : (
+          <View style={s.nav}>
+            {nav.map((n) => (
+              <Tap
+                key={n.id}
+                label={n.label}
+                onPress={() => go(n.id)}
+                style={[
+                  s.navItem,
+                  page === n.id && { backgroundColor: "#1a201b" },
+                ]}
+              >
+                <Icon
+                  name={n.icon}
+                  size={21}
+                  color={page === n.id ? c.lime : c.muted}
+                />
+                <Text
+                  style={{
+                    fontSize: 10,
+                    color: page === n.id ? c.lime : c.muted,
+                    marginTop: 7,
+                  }}
+                >
+                  {n.label}
+                </Text>
+              </Tap>
+            ))}
+          </View>
+        )}
+        <Modal
+          visible={ticket !== null}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setTicket(null)}
+        >
+          <View style={s.modalStage}>
+            <Tap
+              label="Fechar ordem"
+              onPress={() => setTicket(null)}
+              style={{ flex: 1, width: "100%" }}
+            >
+              <View />
+            </Tap>
+            <View style={s.sheet}>
+              <View style={s.handle} />
+              <View
+                style={[s.row, { paddingHorizontal: 22, paddingVertical: 14 }]}
+              >
+                <Tap
+                  label="Cancelar ordem"
+                  onPress={() => setTicket(null)}
+                  style={s.iconButton}
+                >
+                  <Icon name="close" />
+                </Tap>
+                <View style={{ flex: 1, alignItems: "center" }}>
+                  <Text style={s.h3}>
+                    {review
+                      ? "Revisar operação"
+                      : ticket === "short"
+                        ? "Abrir short"
+                        : selected?.kind === "spot"
+                          ? "Comprar"
+                          : "Abrir long"}{" "}
+                    · {selected?.symbol}
+                  </Text>
+                </View>
+                <Pill text="DEMO" bright />
+              </View>
+              {review ? (
+                <View style={{ padding: 24, gap: 22 }}>
+                  <View style={{ alignItems: "center", paddingVertical: 14 }}>
+                    <View style={s.successCircle}>
+                      <Icon name="shield" color={c.lime} size={30} />
+                    </View>
+                    <Text
+                      style={[s.detailPrice, { fontSize: 36, marginTop: 18 }]}
+                    >
+                      {money(Number(amount) * leverage)}
+                    </Text>
+                    <Muted style={{ marginTop: 8 }}>
+                      Exposição simulada · {leverage}×
+                    </Muted>
+                  </View>
+                  <View style={s.reviewRow}>
+                    <Muted>Margem USD</Muted>
+                    <Text style={s.tokenPrice}>{money(Number(amount))}</Text>
+                  </View>
+                  <View style={s.reviewRow}>
+                    <Muted>Preço da sessão</Muted>
+                    <Text style={s.tokenPrice}>
+                      {selected ? price(selected.price) : ""}
+                    </Text>
+                  </View>
+                  <View style={s.reviewRow}>
+                    <Muted>Tipo de execução</Muted>
+                    <Text style={{ color: c.lime, fontSize: 13 }}>
+                      Paper · sem transação
+                    </Text>
+                  </View>
+                  <Muted style={{ lineHeight: 20, fontSize: 12 }}>
+                    Sem taxas, funding, slippage ou liquidação contínua. Seus
+                    fundos reais não serão movimentados.
+                  </Muted>
+                  <Tap
+                    label="Confirmar simulação"
+                    onPress={confirm}
+                    disabled={account.killed}
+                    style={s.primary}
+                  >
+                    <Text style={s.primaryText}>Confirmar simulação</Text>
+                  </Tap>
+                  <Tap
+                    label="Editar ordem"
+                    onPress={() => setReview(false)}
+                    style={{ alignItems: "center", padding: 8 }}
+                  >
+                    <Muted>Editar valor</Muted>
+                  </Tap>
+                </View>
+              ) : (
+                <>
+                  <View
+                    style={{
+                      paddingHorizontal: 24,
+                      paddingTop: 25,
+                      paddingBottom: 22,
+                    }}
+                  >
+                    <Muted style={{ fontSize: 10, letterSpacing: 1.3 }}>
+                      MARGEM SIMULADA
+                    </Muted>
+                    <View style={[s.row, { marginTop: 12 }]}>
+                      <Text style={{ color: c.muted, fontSize: 34 }}>$</Text>
+                      <TextInput
+                        accessibilityLabel="Margem simulada em USD"
+                        value={amount}
+                        onChangeText={setAmount}
+                        inputMode="decimal"
+                        keyboardType="decimal-pad"
+                        style={s.amountInput}
+                      />
+                      <Text style={{ color: c.muted, fontSize: 13 }}>USD</Text>
+                    </View>
+                    <Muted style={{ fontSize: 11, marginTop: 10 }}>
+                      Disponível {money(account.cash)}
+                    </Muted>
+                  </View>
+                  {selected?.kind === "perp" && (
+                    <View style={s.leverageRow}>
+                      <Muted>Alavancagem</Muted>
+                      <View style={[s.row, { gap: 6 }]}>
+                        {[1, 2, 5, 10].map((n) => (
+                          <Tap
+                            key={n}
+                            label={`${n}×`}
+                            onPress={() => setLeverage(n)}
+                            style={[
+                              s.leverage,
+                              n === leverage && { backgroundColor: c.lime },
+                            ]}
+                          >
+                            <Text
+                              style={{
+                                color: n === leverage ? c.bg : c.ink,
+                                fontSize: 12,
+                              }}
+                            >
+                              {n}×
+                            </Text>
+                          </Tap>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+                  <View style={{ paddingHorizontal: 20, paddingTop: 18 }}>
+                    <View style={[s.row, { gap: 7 }]}>
+                      {[25, 50, 75, 100].map((n) => (
+                        <Tap
+                          key={n}
+                          label={`Usar ${n}% do saldo`}
+                          onPress={() =>
+                            setAmount(((account.cash * n) / 100).toFixed(2))
+                          }
+                          style={s.percent}
+                        >
+                          <Text style={{ color: c.ink, fontSize: 11 }}>
+                            {n === 100 ? "Máx" : n + "%"}
+                          </Text>
+                        </Tap>
+                      ))}
+                    </View>
+                    <View style={s.keypad}>
+                      {[
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                        "5",
+                        "6",
+                        "7",
+                        "8",
+                        "9",
+                        ".",
+                        "0",
+                        "⌫",
+                      ].map((k) => (
+                        <Tap
+                          key={k}
+                          label={`Tecla ${k}`}
+                          onPress={() => keypad(k)}
+                          style={s.key}
+                        >
+                          <Text style={{ color: c.ink, fontSize: 21 }}>
+                            {k}
+                          </Text>
+                        </Tap>
+                      ))}
+                    </View>
+                    <Tap
+                      label="Revisar simulação"
+                      disabled={
+                        !Number.isFinite(Number(amount)) ||
+                        Number(amount) <= 0 ||
+                        Number(amount) > account.cash ||
+                        account.killed
+                      }
+                      onPress={() => setReview(true)}
+                      style={[s.primary, { marginBottom: 24 }]}
+                    >
+                      <Text style={s.primaryText}>Revisar simulação</Text>
+                    </Tap>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        </Modal>
+      </View>
+    </View>
+  );
 }
-const s=StyleSheet.create({
- root:{flex:1,backgroundColor:C.bg,flexDirection:'row'},text:{color:C.text,fontSize:13},row:{flexDirection:'row',alignItems:'center',gap:10},label:{color:C.muted,fontSize:12},strong:{color:C.text,fontSize:14,fontWeight:'600'},small:{color:C.muted,fontSize:10},h2:{color:C.text,fontSize:16,fontWeight:'600'},title:{color:C.text,fontWeight:'600',letterSpacing:-1},logo:{color:C.lime,fontSize:34},brand:{color:C.text,fontSize:29,fontWeight:'700',letterSpacing:-1},sidebar:{width:208,padding:24,borderRightWidth:1,borderRightColor:C.line},nav:{flexDirection:'row',alignItems:'center',gap:8,paddingVertical:13,paddingHorizontal:10,marginHorizontal:-10,borderRadius:8,marginBottom:5},navActive:{backgroundColor:'#1b2522'},sidebarNote:{backgroundColor:C.panel,padding:14,borderRadius:12},topbar:{height:76,borderBottomWidth:1,borderBottomColor:C.line,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},avatar:{width:32,height:32,borderRadius:16,backgroundColor:'#293322',alignItems:'center',justifyContent:'center'},badge:{borderWidth:1,paddingHorizontal:8,paddingVertical:5,borderRadius:5,alignSelf:'flex-start'},button:{backgroundColor:'#202a35',paddingVertical:12,paddingHorizontal:14,borderRadius:8,alignItems:'center',justifyContent:'center'},buttonText:{color:C.text,fontSize:12,fontWeight:'600'},limeButton:{backgroundColor:C.lime},redButton:{backgroundColor:'#302027',borderWidth:1,borderColor:'#67404a'},balance:{backgroundColor:C.lime,borderRadius:16,padding:23},darkLabel:{color:'#394315',fontSize:11,letterSpacing:.7},balanceValue:{color:'#151c0b',fontSize:42,fontWeight:'600',letterSpacing:-2,marginTop:18,marginBottom:6},stat:{flex:1,backgroundColor:C.panel,borderWidth:1,borderColor:C.line,borderRadius:16,padding:22,justifyContent:'space-between',gap:16},statValue:{color:C.text,fontSize:35,fontWeight:'500',letterSpacing:-1},ecosystem:{flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:22,paddingVertical:4},card:{backgroundColor:C.panel,borderWidth:1,borderColor:C.line,borderRadius:14,overflow:'hidden'},sectionHeader:{padding:20,flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:10},chip:{paddingHorizontal:13,paddingVertical:8,borderRadius:6},chipActive:{backgroundColor:'#293126'},input:{borderWidth:1,borderColor:C.line,borderRadius:8,padding:12,color:C.text,fontSize:14,backgroundColor:'#0c121a',minHeight:44},tableHead:{paddingHorizontal:20,paddingTop:23,paddingBottom:12},marketRow:{flexDirection:'row',alignItems:'center',gap:12,paddingHorizontal:20,paddingVertical:16,borderTopWidth:1,borderTopColor:'#1c2530'},coin:{width:36,height:36,borderRadius:18,alignItems:'center',justifyContent:'center'},priceSmall:{color:C.text,fontSize:13,fontWeight:'500'},divider:{height:1,backgroundColor:C.line},agentIcon:{width:44,height:44,borderRadius:12,justifyContent:'center',alignItems:'center'},notice:{backgroundColor:'#1b2630',borderWidth:1,borderColor:'#344757',borderRadius:10,padding:14,flexDirection:'row',gap:12,alignItems:'center'},warning:{padding:16,backgroundColor:'#302027',borderRadius:8},bottomNav:{flexDirection:'row',backgroundColor:C.panel,borderTopWidth:1,borderTopColor:C.line,paddingBottom:10}
+
+const s = StyleSheet.create({
+  stage: { flex: 1, backgroundColor: "#050709", alignItems: "center" },
+  phone: {
+    flex: 1,
+    width: "100%",
+    maxWidth: 480,
+    backgroundColor: c.bg,
+    paddingTop: Platform.OS === "ios" ? 48 : Platform.OS === "android" ? 28 : 8,
+  },
+  desktopPhone: {
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: "#1e2429",
+  },
+  row: { flexDirection: "row", alignItems: "center", gap: 10 },
+  muted: { color: c.muted, fontSize: 13 },
+  topbar: {
+    height: 64,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  walletButton: { flexDirection: "row", alignItems: "center", gap: 8 },
+  avatar: {
+    width: 29,
+    height: 29,
+    borderRadius: 15,
+    backgroundColor: "#252e22",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  iconButton: { padding: 7 },
+  pill: {
+    backgroundColor: c.raised,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+  },
+  balanceCard: {
+    backgroundColor: c.lime,
+    borderRadius: 24,
+    padding: 23,
+    marginTop: 9,
+    overflow: "hidden",
+  },
+  darkLabel: {
+    color: "#45502a",
+    fontSize: 10,
+    letterSpacing: 1.5,
+    fontWeight: "600",
+  },
+  balanceValue: {
+    color: "#151a0c",
+    fontSize: 47,
+    fontWeight: "600",
+    letterSpacing: -2.5,
+    marginTop: 18,
+    marginBottom: 10,
+    zIndex: 1,
+  },
+  balanceBottom: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 29,
+  },
+  orbital: { position: "absolute", right: -36, top: 35 },
+  quickActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingTop: 22,
+    paddingBottom: 24,
+    paddingHorizontal: 12,
+  },
+  quickAction: { alignItems: "center" },
+  quickCircle: {
+    width: 48,
+    height: 48,
+    backgroundColor: c.raised,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  agentBanner: {
+    padding: 14,
+    backgroundColor: c.card,
+    borderRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  agentMark: {
+    width: 41,
+    height: 41,
+    borderRadius: 13,
+    backgroundColor: "#282e20",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  section: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 27,
+    marginBottom: 16,
+  },
+  h2: { color: c.ink, fontSize: 19, fontWeight: "600", letterSpacing: -0.4 },
+  h3: { color: c.ink, fontSize: 14, fontWeight: "600" },
+  perpCard: {
+    width: 160,
+    backgroundColor: c.card,
+    borderRadius: 17,
+    padding: 16,
+  },
+  tokenRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#171d23",
+  },
+  tokenName: { color: c.ink, fontSize: 13, fontWeight: "500" },
+  symbol: { fontSize: 10, color: c.muted, fontWeight: "400" },
+  tokenPrice: { color: c.ink, fontSize: 13, fontWeight: "500" },
+  disclaimer: {
+    fontSize: 10,
+    lineHeight: 18,
+    textAlign: "center",
+    marginTop: 26,
+    marginBottom: 6,
+  },
+  nav: {
+    flexDirection: "row",
+    paddingHorizontal: 12,
+    paddingTop: 9,
+    paddingBottom: Platform.OS === "ios" ? 28 : 12,
+    backgroundColor: "#0e1318",
+    borderTopWidth: 1,
+    borderTopColor: "#1c232a",
+  },
+  navItem: {
+    alignItems: "center",
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  pageTitle: {
+    color: c.ink,
+    fontSize: 29,
+    fontWeight: "600",
+    letterSpacing: -1,
+    marginTop: 14,
+    marginBottom: 16,
+  },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    backgroundColor: c.card,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    minHeight: 47,
+  },
+  searchInput: {
+    flex: 1,
+    color: c.ink,
+    fontSize: 13,
+    paddingVertical: 13,
+    minWidth: 0,
+  },
+  filters: { flexDirection: "row", gap: 5, marginTop: 18, marginBottom: 3 },
+  filter: { paddingHorizontal: 13, paddingVertical: 10, borderRadius: 18 },
+  filterActive: { backgroundColor: "#252c1e" },
+  detailPrice: {
+    color: c.ink,
+    fontSize: 42,
+    letterSpacing: -1.5,
+    fontWeight: "600",
+  },
+  chartCaption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 13,
+  },
+  statGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  statTile: {
+    width: "48%",
+    flexGrow: 1,
+    backgroundColor: c.card,
+    borderRadius: 15,
+    padding: 16,
+  },
+  tradeBar: {
+    flexDirection: "row",
+    gap: 11,
+    padding: 20,
+    paddingBottom: Platform.OS === "ios" ? 32 : 20,
+    backgroundColor: c.bg,
+    borderTopWidth: 1,
+    borderTopColor: "#1d242a",
+  },
+  primary: {
+    minHeight: 52,
+    paddingHorizontal: 20,
+    borderRadius: 28,
+    backgroundColor: c.lime,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  primaryText: { color: "#11170a", fontSize: 16, fontWeight: "700" },
+  dataPanel: {
+    padding: 18,
+    backgroundColor: c.card,
+    borderRadius: 16,
+    marginTop: 25,
+  },
+  refresh: { padding: 8 },
+  agentCard: {
+    padding: 18,
+    borderRadius: 19,
+    backgroundColor: c.card,
+    marginBottom: 13,
+  },
+  toggle: {
+    width: 42,
+    height: 25,
+    borderRadius: 14,
+    padding: 3,
+    backgroundColor: "#383d43",
+    justifyContent: "center",
+  },
+  toggleKnob: {
+    width: 19,
+    height: 19,
+    borderRadius: 10,
+    backgroundColor: "#a0a5ab",
+  },
+  progress: { height: 3, borderRadius: 2, backgroundColor: "#30352d" },
+  agentRun: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingTop: 19,
+    marginTop: 17,
+    borderTopWidth: 1,
+    borderTopColor: "#292f30",
+  },
+  emergency: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    padding: 17,
+    borderWidth: 1,
+    borderColor: "#593035",
+    borderRadius: 14,
+    marginTop: 4,
+  },
+  killBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: "#2a181e",
+  },
+  toast: {
+    marginHorizontal: 20,
+    marginBottom: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#343c30",
+    backgroundColor: "#1d241b",
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  empty: {
+    alignItems: "center",
+    paddingVertical: 28,
+    paddingHorizontal: 25,
+    gap: 14,
+  },
+  smallAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 10,
+  },
+  smallActionText: { color: c.lime, fontSize: 12 },
+  position: {
+    padding: 16,
+    borderRadius: 15,
+    backgroundColor: c.card,
+    marginBottom: 11,
+  },
+  closePosition: {
+    alignItems: "center",
+    padding: 11,
+    backgroundColor: c.raised,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  historyRow: {
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1d2329",
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+  },
+  historyIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profileCard: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+    paddingVertical: 20,
+  },
+  connection: {
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: c.line,
+  },
+  modalStage: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "flex-end",
+    backgroundColor: "#000000a6",
+  },
+  sheet: {
+    width: "100%",
+    maxWidth: 480,
+    backgroundColor: "#13171d",
+    borderTopLeftRadius: 27,
+    borderTopRightRadius: 27,
+    paddingBottom: Platform.OS === "ios" ? 20 : 0,
+  },
+  handle: {
+    width: 34,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#4c5158",
+    alignSelf: "center",
+    marginTop: 10,
+  },
+  amountInput: {
+    flex: 1,
+    fontSize: 42,
+    fontWeight: "500",
+    color: c.ink,
+    minWidth: 0,
+    padding: 0,
+  },
+  leverageRow: {
+    paddingVertical: 15,
+    paddingHorizontal: 24,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: c.line,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  leverage: { padding: 9, borderRadius: 8, backgroundColor: c.raised },
+  percent: {
+    flex: 1,
+    padding: 9,
+    alignItems: "center",
+    borderRadius: 6,
+    backgroundColor: c.raised,
+  },
+  keypad: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 10,
+    marginBottom: 12,
+  },
+  key: {
+    width: "33.333%",
+    height: 49,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  reviewRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  successCircle: {
+    width: 64,
+    height: 64,
+    backgroundColor: "#29301f",
+    borderRadius: 32,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 });
