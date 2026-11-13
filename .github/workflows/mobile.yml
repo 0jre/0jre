@@ -1,0 +1,34 @@
+name: Trading platform checks
+on:
+  pull_request:
+    paths:
+      [
+        "apps/**",
+        "package.json",
+        "package-lock.json",
+        ".github/workflows/mobile.yml",
+      ]
+  push:
+    branches: [main]
+    paths:
+      [
+        "apps/**",
+        "package.json",
+        "package-lock.json",
+        ".github/workflows/mobile.yml",
+      ]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build:web
