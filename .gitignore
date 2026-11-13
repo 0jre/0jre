@@ -1,0 +1,8 @@
+
+# Local development
+node_modules/
+.expo/
+dist/
+web-build/
+.reference/
+.ara/

@@ -1,0 +1,23 @@
+{
+  "name": "orbit-trading-workspace",
+  "private": true,
+  "workspaces": ["apps/mobile"],
+  "scripts": {
+    "start": "npm run start --workspace apps/mobile",
+    "web": "npm run web --workspace apps/mobile",
+    "typecheck": "tsc --noEmit -p apps/mobile",
+    "test": "tsx --test apps/mobile/src/domain.test.ts apps/mobile/src/services/marketData.test.ts",
+    "build:web": "npm run build:web --workspace apps/mobile"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.2",
+    "tsx": "^4.20.0",
+    "@types/react": "~19.1.10",
+    "@types/node": "^22.0.0"
+  },
+  "overrides": {
+    "@expo/metro-config": {
+      "postcss": "^8.5.32"
+    }
+  }
+}
