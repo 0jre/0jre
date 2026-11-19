@@ -1,0 +1,16 @@
+
+# Local development
+node_modules/
+.expo/
+dist/
+web-build/
+apps/mobile/src/ui/tuffui.generated.css
+.reference/
+.ara/
+.env
+.env.*
+!.env.example
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

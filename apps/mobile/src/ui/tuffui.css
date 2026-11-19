@@ -1,0 +1,87 @@
+/* TUFFUI manual installation, https://tuffui.com/docs/installation.
+   No Tailwind preflight: preserve React Native Web's layout reset. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@source "./tuffui/*.tsx";
+@source "./tuff.web.tsx";
+
+:root {
+  --background: #ffffff;
+  --foreground: #101318;
+  --muted-foreground: #596271;
+  --surface: #f5f6f8;
+  --surface-inset: #ffffff;
+  --surface-raised: #eceef2;
+  --brand: #101318;
+  --brand-foreground: #ffffff;
+  --positive: #107036;
+  --negative: #c5283d;
+  --warning: #975000;
+  --button: linear-gradient(0deg, #fff 0%, #e6e6e6 100%);
+  --button-hover: linear-gradient(0deg, #fff 0%, #eee 100%);
+  --button-foreground: #101318;
+  --button-edge: rgba(0,0,0,.1);
+  --button-shadow: 0 0 #0000;
+  --button-secondary: linear-gradient(180deg, #e2e2e2 0%, #ececec 100%);
+  --button-secondary-hover: linear-gradient(180deg, #dadada 0%, #e4e4e4 100%);
+}
+.dark {
+  --background: #070a10;
+  --foreground: #f7f9fc;
+  --muted-foreground: #a0aec0;
+  --surface: #101722;
+  --surface-inset: #070a10;
+  --surface-raised: #192334;
+  --brand: #246ce0;
+  --brand-foreground: #ffffff;
+  --positive: #4ade80;
+  --negative: #ff7185;
+  --warning: #ffb454;
+  --button: linear-gradient(0deg, #fff 0%, #ababab 100%);
+  --button-hover: linear-gradient(0deg, #fff 0%, #c2c2c2 100%);
+  --button-foreground: #101318;
+  --button-edge: rgba(255,255,255,.5);
+  --button-shadow: 0 2px 2px 0 rgba(0,0,0,.1);
+  --button-secondary: linear-gradient(180deg, #101722 0%, #192334 100%);
+  --button-secondary-hover: linear-gradient(180deg, #192334 0%, #283548 100%);
+}
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-surface: var(--surface);
+  --color-surface-inset: var(--surface-inset);
+  --color-surface-raised: var(--surface-raised);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-warning: var(--warning);
+}
+.orbit-action {
+  appearance: none;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  height: auto;
+  min-width: 0;
+  padding: 0;
+  gap: 0;
+  border: 0 solid transparent;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  text-align: inherit;
+  white-space: normal;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.orbit-action:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.orbit-action:disabled { cursor: default; }
+.orbit-pill { box-sizing: border-box; font-family: inherit; line-height: 1; }
+@media (prefers-reduced-motion: reduce) { .orbit-action { transition: none; } }
